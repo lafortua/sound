@@ -173,7 +173,8 @@
 
     #spectrogram-status,
     #uploaded-audio-status,
-    #finger-playback-status {
+    #finger-playback-status,
+    #camera-status {
       font-size: 11px;
       margin-top: 6px;
     }
@@ -333,6 +334,21 @@
                 <div>
                     <!-- Options Checkboxes -->
                     <div>
+                        <div>
+                            <strong>Camera Input</strong>
+
+                            <div>
+                                <label>
+                                    <span>Camera</span>
+                                    <select id="camera-device-select">
+                                        <option value="">Default camera</option>
+                                    </select>
+                                </label>
+                                <div class="control-note">On iPhone, grant camera access first; iOS exposes camera names after permission is granted.</div>
+                                <div id="camera-status">Camera selection will be available after permission is granted.</div>
+                            </div>
+                        </div>
+
                         <div>
                             <strong>Hand Tracking</strong>
 
@@ -647,6 +663,12 @@
       let videoElement, canvasElement, canvasCtx;
       let handsModel = null;
       let cameraInstance = null;
+      let activeVideoStream = null;
+      let selectedCameraDeviceId = '';
+      let knownCameraDevices = [];
+      let cameraFrameLoopToken = 0;
+      let cameraStartSequence = 0;
+      let isSubmittingFrame = false;
       let lastProcessedTime = performance.now();
       let lastFrameSubmitTime = 0;
       let frameTimes = [];
@@ -2810,6 +2832,157 @@
         canvasCtx.restore();
       }
 
+      // ---------------------------------------------------------------------
+      // Camera selection helpers
+      // ---------------------------------------------------------------------
+      function setCameraStatus(message) {
+        const status = document.getElementById('camera-status');
+        if (status) status.innerText = message;
+      }
+
+      function stopActiveVideoStream() {
+        if (!activeVideoStream) return;
+        for (const track of activeVideoStream.getTracks()) {
+          try { track.stop(); } catch (_) {}
+        }
+        activeVideoStream = null;
+      }
+
+      function resetTrackingForCameraChange() {
+        persistentMarkers = {};
+        trackedMarkers = [];
+        lastMarkerTime = 0;
+        lastFrameSubmitTime = 0;
+        frameTimes = [];
+        lastProcessedTime = performance.now();
+        resetSheetTrackingStates();
+        shutdownFingerSpectrogramSynth();
+      }
+
+      function describeCameraDevice(device, index) {
+        if (device.label) return device.label;
+        return `Camera ${index + 1}`;
+      }
+
+      async function refreshCameraDeviceList(preferredDeviceId = selectedCameraDeviceId) {
+        const select = document.getElementById('camera-device-select');
+        if (!navigator.mediaDevices || !navigator.mediaDevices.enumerateDevices) {
+          if (select) select.disabled = true;
+          setCameraStatus('This browser does not expose a camera list; using the default camera.');
+          return [];
+        }
+
+        try {
+          const devices = await navigator.mediaDevices.enumerateDevices();
+          knownCameraDevices = devices.filter(device => device.kind === 'videoinput');
+
+          if (!select) return knownCameraDevices;
+
+          const previousValue = preferredDeviceId || select.value || '';
+          select.innerHTML = '';
+
+          const defaultOption = document.createElement('option');
+          defaultOption.value = '';
+          defaultOption.textContent = 'Default camera';
+          select.appendChild(defaultOption);
+
+          knownCameraDevices.forEach((device, index) => {
+            const option = document.createElement('option');
+            option.value = device.deviceId;
+            option.textContent = describeCameraDevice(device, index);
+            select.appendChild(option);
+          });
+
+          if (previousValue && knownCameraDevices.some(device => device.deviceId === previousValue)) {
+            select.value = previousValue;
+          } else {
+            select.value = '';
+            selectedCameraDeviceId = '';
+          }
+
+          select.disabled = knownCameraDevices.length <= 1;
+          const labelStatus = knownCameraDevices.some(device => device.label)
+            ? `${knownCameraDevices.length} camera${knownCameraDevices.length === 1 ? '' : 's'} available.`
+            : 'Camera names will appear after browser permission is granted.';
+          setCameraStatus(labelStatus);
+          return knownCameraDevices;
+        } catch (err) {
+          console.warn('Could not enumerate camera devices:', err);
+          setCameraStatus('Could not read the browser camera list; using the default camera.');
+          return [];
+        }
+      }
+
+      function buildVideoConstraints(deviceId = selectedCameraDeviceId) {
+        const videoConstraints = {
+          width: { ideal: 1280 },
+          height: { ideal: 720 }
+        };
+
+        // Use an exact deviceId after the user chooses a camera. This is the
+        // most reliable cross-browser way to switch among iPhone front/back/
+        // ultra-wide camera entries once iOS has revealed them after permission.
+        if (deviceId) {
+          videoConstraints.deviceId = { exact: deviceId };
+        } else {
+          videoConstraints.facingMode = { ideal: 'user' };
+        }
+
+        return {
+          video: videoConstraints,
+          audio: false
+        };
+      }
+
+      async function attachVideoStream(stream) {
+        activeVideoStream = stream;
+        videoElement.setAttribute('playsinline', '');
+        videoElement.muted = true;
+
+        const metadataReady = new Promise((resolve) => {
+          const finish = () => {
+            videoElement.removeEventListener('loadedmetadata', finish);
+            resolve();
+          };
+          videoElement.addEventListener('loadedmetadata', finish, { once: true });
+          setTimeout(finish, 1200);
+        });
+
+        videoElement.srcObject = stream;
+        await metadataReady;
+
+        try {
+          await videoElement.play();
+        } catch (err) {
+          console.warn('Video play() was not immediately accepted:', err);
+        }
+
+        canvasElement.width = videoElement.videoWidth || 1280;
+        canvasElement.height = videoElement.videoHeight || 720;
+      }
+
+      function setupCameraSelectionControls() {
+        const select = document.getElementById('camera-device-select');
+        if (select) {
+          select.addEventListener('change', () => {
+            selectedCameraDeviceId = select.value;
+            const selectedLabel = select.options[select.selectedIndex]
+              ? select.options[select.selectedIndex].textContent
+              : 'selected camera';
+            setCameraStatus(`Switching to ${selectedLabel}...`);
+            startWebcamCapture(selectedCameraDeviceId);
+          });
+        }
+
+        if (navigator.mediaDevices && navigator.mediaDevices.addEventListener) {
+          navigator.mediaDevices.addEventListener('devicechange', () => {
+            refreshCameraDeviceList(selectedCameraDeviceId);
+          });
+        }
+
+        refreshCameraDeviceList();
+      }
+
       // Initialize MediaPipe and Local Marker Detection modules
       function initMediaPipe() {
         try {
@@ -2891,55 +3064,83 @@
         }
       }
 
-      // Capture User Webcam video stream
-      async function startWebcamCapture() {
+      // Capture selected webcam video stream. The stream is displayed and
+      // submitted to both tracking algorithms without applying any mirror transform.
+      async function startWebcamCapture(deviceId = selectedCameraDeviceId) {
         videoElement = document.getElementById('webcam-source');
         canvasElement = document.getElementById('output-canvas');
         canvasCtx = canvasElement.getContext('2d');
+        selectedCameraDeviceId = deviceId || '';
+
+        const startToken = ++cameraStartSequence;
+        cameraFrameLoopToken++;
+        isSubmittingFrame = false;
+        stopActiveVideoStream();
+        resetTrackingForCameraChange();
 
         try {
-          const stream = await navigator.mediaDevices.getUserMedia({
-            video: {
-              width: { ideal: 1280 },
-              height: { ideal: 720 },
-              facingMode: "user"
-            },
-            audio: false
-          });
+          setCameraStatus(selectedCameraDeviceId ? 'Opening selected camera...' : 'Opening default camera...');
+          const stream = await navigator.mediaDevices.getUserMedia(buildVideoConstraints(selectedCameraDeviceId));
+          if (startToken !== cameraStartSequence) {
+            for (const track of stream.getTracks()) {
+              try { track.stop(); } catch (_) {}
+            }
+            return;
+          }
 
-          videoElement.srcObject = stream;
+          await attachVideoStream(stream);
+          if (startToken !== cameraStartSequence) {
+            stopActiveVideoStream();
+            return;
+          }
 
-          // Match resolution of elements as soon as camera loads
-          videoElement.onloadedmetadata = () => {
-            canvasElement.width = videoElement.videoWidth;
-            canvasElement.height = videoElement.videoHeight;
+          await refreshCameraDeviceList(selectedCameraDeviceId);
 
-            // Clear landing display screen
-            const splashScreen = document.getElementById('splash-screen');
-            if (splashScreen) splashScreen.classList.add('opacity-0', 'pointer-events-none');
-            showToast("Visual intelligence pipeline active!", "success");
+          // Clear landing display screen
+          const splashScreen = document.getElementById('splash-screen');
+          if (splashScreen) splashScreen.classList.add('opacity-0', 'pointer-events-none');
 
-            // Start Frame loop processing
-            initCameraFrameLoop();
-          };
+          const activeTrack = stream.getVideoTracks()[0];
+          const activeLabel = activeTrack && activeTrack.label ? activeTrack.label : 'camera';
+          setCameraStatus(`Using ${activeLabel}.`);
+          showToast('Visual intelligence pipeline active.', 'success');
 
+          // Start frame loop processing against the selected stream.
+          initCameraFrameLoop();
         } catch (err) {
-          console.error("Camera connection rejected:", err);
-          showToast("Webcam access rejected. Manual permission validation required.", "error");
+          console.error('Camera connection rejected:', err);
+
+          // Some mobile browsers can reject exact device IDs after a hardware
+          // change. Fall back to the browser default instead of leaving the app stuck.
+          if (selectedCameraDeviceId) {
+            const failedId = selectedCameraDeviceId;
+            selectedCameraDeviceId = '';
+            const select = document.getElementById('camera-device-select');
+            if (select) select.value = '';
+            console.warn(`Camera ${failedId} could not be opened; falling back to default camera.`);
+            setCameraStatus('Selected camera could not be opened. Falling back to the default camera...');
+            startWebcamCapture('');
+            return;
+          }
+
+          showToast('Webcam access rejected. Manual permission validation required.', 'error');
+          setCameraStatus('Camera access is blocked or unavailable.');
 
           const splashTitle = document.getElementById('splash-title');
-          if (splashTitle) splashTitle.innerText = "Webcam Blocked";
+          if (splashTitle) splashTitle.innerText = 'Webcam Blocked';
           const splashDesc = document.getElementById('splash-desc');
-          if (splashDesc) splashDesc.innerText = "The application lacks camera access permissions. Unblock in settings.";
+          if (splashDesc) splashDesc.innerText = 'The application lacks camera access permissions. Unblock it in browser settings, then retry.';
 
           const retryBtn = document.getElementById('retry-camera-btn');
           if (retryBtn) {
             retryBtn.classList.remove('hidden');
             retryBtn.onclick = () => {
               retryBtn.classList.add('hidden');
-              startWebcamCapture();
+              startWebcamCapture(selectedCameraDeviceId);
             };
           }
+
+          await refreshCameraDeviceList(selectedCameraDeviceId);
         }
       }
 
@@ -2950,29 +3151,40 @@
         return 1000 / fps;
       }
 
-      // Set up high performance processing loop
+      // Set up high performance processing loop against the currently selected stream.
       function initCameraFrameLoop() {
-        cameraInstance = new Camera(videoElement, {
-          onFrame: async () => {
-            if (!handsModel) return;
+        const loopToken = ++cameraFrameLoopToken;
 
+        const processFrame = async () => {
+          if (loopToken !== cameraFrameLoopToken) return;
+
+          if (handsModel && videoElement && videoElement.readyState >= 2 && !isSubmittingFrame) {
             const now = performance.now();
             const minInputInterval = getTrackingInputIntervalMs();
-            if (minInputInterval > 0 && now - lastFrameSubmitTime < minInputInterval) return;
+            if (minInputInterval <= 0 || now - lastFrameSubmitTime >= minInputInterval) {
+              lastFrameSubmitTime = now;
+              isSubmittingFrame = true;
+              try {
+                await handsModel.send({ image: videoElement });
+              } catch (err) {
+                console.error('Frame processing error:', err);
+              } finally {
+                isSubmittingFrame = false;
+              }
+            }
+          }
 
-            lastFrameSubmitTime = now;
-            await handsModel.send({ image: videoElement });
-          },
-          width: 1280,
-          height: 720
-        });
-        cameraInstance.start();
+          requestAnimationFrame(processFrame);
+        };
+
+        requestAnimationFrame(processFrame);
       }
 
       // Auto load on system DOM ready
       window.onload = () => {
         populateDefinedSheetControls();
         setupSpectrogramControls();
+        setupCameraSelectionControls();
         updateSpectrogramCaptureReady();
         initMediaPipe();
 
