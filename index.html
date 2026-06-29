@@ -1,0 +1,2988 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hand Tracking & Marker Detection - MediaPipe & ArUco</title>
+
+    <!-- MediaPipe & Camera Helpers -->
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/control_utils/control_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+    <!-- js-aruco2 browser sources. The previous jared-hughes/dist URL is not a valid bundle. -->
+    <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/cv.js" crossorigin="anonymous"></script>
+    <script src="https://cdn.jsdelivr.net/gh/damianofalcioni/js-aruco2@master/src/aruco.js" crossorigin="anonymous"></script>
+
+  <style>
+    body {
+      margin: 0;
+      background: #5f8196;
+      color: #111;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 14px;
+    }
+
+    p {
+      text-indent: 2ch;
+    }
+
+    a { color: #0b5f8f; font-weight: bold; }
+
+    .plain-link {
+      font-weight: normal;
+      font-size: 12px;
+      color: white;
+    }
+
+    #page {
+      width: 980px;
+      margin: 0 auto;
+      background: #e8eef0;
+      border-left: 2px solid #8fa7b4;
+      border-right: 2px solid #8fa7b4;
+      min-height: 100vh;
+    }
+
+    #header {
+      background: #54788d;
+      color: white;
+      padding: 12px 18px 6px 18px;
+      border-bottom: 3px solid #d69b16;
+    }
+
+    #site-title {
+      font-family: Georgia, "Times New Roman", serif;
+      font-size: 38px;
+      font-variant: small-caps;
+      letter-spacing: 1px;
+      text-shadow: 2px 2px #38596c;
+    }
+
+    #top-links {
+      margin-top: 8px;
+      background: #6f7629;
+      border-top: 1px solid #b5bc74;
+      border-bottom: 1px solid #333;
+      padding: 3px 6px;
+      font-size: 13px;
+    }
+
+    #top-links a {
+      color: white;
+      text-decoration: none;
+      margin-right: 22px;
+    }
+
+    #main {
+      display: table;
+      width: 100%;
+      table-layout: fixed;
+    }
+
+    #left-column {
+      display: table-cell;
+      width: 270px;
+      vertical-align: top;
+      background: #d5e1e6;
+      padding: 12px;
+      border-right: 2px solid #9aaeb8;
+    }
+
+    #content {
+      display: table-cell;
+      vertical-align: top;
+      padding: 16px 20px 28px 20px;
+      background: white;
+    }
+
+
+    .box {
+      background: #fff;
+      border: 1px solid #8a9ca5;
+      margin-bottom: 12px;
+    }
+
+    .box-title {
+      background: #a94b1b;
+      color: white;
+      font-weight: bold;
+      padding: 4px 7px;
+      font-size: 13px;
+    }
+
+    .box-body {
+      padding: 8px;
+    }
+
+    #left-column .box-body {
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    #left-column .box-body > section > div > div,
+    #left-column .box-body > section > div > div > div {
+      margin-bottom: 10px;
+    }
+
+    #left-column label {
+      display: block;
+      margin: 6px 0;
+    }
+
+    #left-column label span {
+      display: block;
+      margin-bottom: 3px;
+    }
+
+    .control-note {
+      color: #555;
+      font-size: 11px;
+      margin-top: -2px;
+    }
+
+    #left-column select,
+    #left-column input[type="number"],
+    #left-column input[type="file"],
+    #left-column button,
+    #left-column audio {
+      width: 100%;
+      box-sizing: border-box;
+    }
+
+
+    #left-column button {
+      margin-top: 8px;
+      padding: 6px 8px;
+      cursor: pointer;
+    }
+
+    #spectrogram-preview {
+      width: 100%;
+      height: auto;
+      border: 1px solid #8a9ca5;
+      background: white;
+      image-rendering: pixelated;
+      box-sizing: border-box;
+    }
+
+    #spectrogram-download {
+      display: inline-block;
+      margin-top: 5px;
+    }
+
+    #spectrogram-status,
+    #uploaded-audio-status,
+    #finger-playback-status {
+      font-size: 11px;
+      margin-top: 6px;
+    }
+
+    #telemetry-log {
+      max-height: 320px;
+      overflow: auto;
+      background: #f7fbfc;
+      border: 1px solid #8a9ca5;
+      padding: 7px;
+      font-family: monospace;
+      font-size: 11px;
+      line-height: 1.3;
+      box-sizing: border-box;
+    }
+
+    #output-canvas {
+      display: block;
+      width: 100%;
+      height: auto;
+      border: 1px solid #777;
+      background: #111;
+      box-sizing: border-box;
+    }
+
+    #webcam-source.hidden {
+      display: none;
+    }
+
+    #splash-screen {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: rgba(255,255,255,0.92);
+      text-align: center;
+      padding: 16px;
+      transition: opacity 0.3s ease;
+    }
+
+    .opacity-0 { opacity: 0; }
+    .pointer-events-none { pointer-events: none; }
+
+    #content table {
+      width: 100%;
+      margin-left: 0;
+      box-sizing: border-box;
+    }
+
+    .live-feed-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-weight: bold;
+      margin-bottom: 6px;
+    }
+
+    iframe {
+      width: 100%;
+      height: 600px;
+      border: 1px solid #777;
+      background: white;
+    }
+
+    h1 {
+      margin: 4px 4px 4px 4px;
+      font-size: 32px;
+      color: #111;
+    }
+
+    h2 {
+      margin: 8px 0 8px 0;
+      font-size: 22px;
+      color: #111;
+    }
+
+    h3 {
+      margin: 4px 0 4px 0;
+      font-size: 17px;
+      color: #111;
+    }
+
+    #footer {
+      text-align: center;
+      color: white;
+      background: #54788d;
+      border-top: 3px solid #d69b16;
+      padding: 10px;
+      font-size: 12px;
+    }
+	
+	.scaled-frame {
+		width: 100%;
+		height: 250px;
+		overflow: hidden;
+		border: 1px solid #777;
+		background: white;
+	}
+
+	.scaled-frame iframe {
+		width: 200%;
+		height: 500px;
+		border: 0;
+		transform: scale(0.5);
+		transform-origin: 0 0;
+	}
+
+
+    table {
+      margin: 1ch 0 1ch 4ch;
+      border-collapse: collapse;
+      border: 1px solid rgb(60, 80, 80);
+    }
+
+    thead,
+    tfoot {
+      background-color: rgb(224, 231, 235);
+    }
+
+    th,
+    td {
+      border: 1px solid rgb(160 160 160);
+      padding: 8px 10px;
+      text-align: left;
+    }
+
+    td:last-of-type {
+      text-align: left;
+    }
+
+      .video-container {
+      position: relative;
+      overflow: hidden;
+      aspect-ratio: 16/9;
+    }
+  </style>
+</head>
+<body>
+  <div id="page">
+    <div id="header">
+        <div id="site-title">Physicalizing Sound</div>
+        <div id="top-links">
+            <a href="#">Home</a>
+            <a href="https://github.com/lafortua/sound">github</a>
+        </div>
+    </div>
+
+    <div id="main">
+      <div id="left-column">
+        <div class="box">
+          <div class="box-title">System Tuning</div>
+          <div class="box-body">
+            <section>
+                <!-- Interactive Options -->
+                <div>
+                    <!-- Options Checkboxes -->
+                    <div>
+                        <div>
+                            <strong>Hand Tracking</strong>
+
+                            <div>
+                                <label>
+                                    <span>Model Complexity</span>
+                                    <select id="setting-complexity">
+                                        <option value="0">Lite (Speedy)</option>
+                                        <option value="1" selected>Full (Precise)</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    <span>Max Hands Limit</span>
+                                    <input type="number" id="setting-max-hands" min="1" max="4" value="2">
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <strong>Tracking Input Rate</strong>
+
+                            <div>
+                                <label>
+                                    <span>Input FPS Cap</span>
+                                    <select id="setting-input-fps">
+                                        <option value="0" selected>No cap</option>
+                                        <option value="30">30 FPS</option>
+                                        <option value="20">20 FPS</option>
+                                        <option value="15">15 FPS</option>
+                                        <option value="10">10 FPS</option>
+                                        <option value="5">5 FPS</option>
+                                        <option value="2">2 FPS</option>
+                                    </select>
+                                </label>
+                                <div class="control-note">Limits the camera frames submitted to both hand tracking and marker tracking.</div>
+                            </div>
+                        </div>
+
+                        <!-- Overlay Toggle Toggles -->
+                        <div>
+                            <strong>Visualization toggles</strong>
+
+                            <div>
+                                <label>
+                                    <span>Draw Skeleton Bones</span>
+                                    <input type="checkbox" id="render-skeleton" checked>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    <span>Draw Landmark Nodes</span>
+                                    <input type="checkbox" id="render-landmarks" checked >
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    <span>Highlight Finger Tips</span>
+                                    <input type="checkbox" id="render-finger-tips" checked>
+                                </label>
+                            </div>
+
+                        </div>
+
+                        <!-- Fiducial Marker (ArUco) Tracking Toggles -->
+                        <div>
+                            <strong>Fiducial Marker (ArUco) Tracking</strong>
+
+                            <div>
+                                <label>
+                                    <span>Enable ArUco Tracking</span>
+                                    <input type="checkbox" id="track-markers" checked>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    <span>Dictionary</span>
+                                    <select id="marker-dictionary">
+                                        <option value="PAPER_5X5_IDS_1_4" selected>Defined sheets: OpenCV 5x5 IDs 0-49</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    <span>Scan Rate Limit</span>
+                                    <select id="marker-fps">
+                                        <option value="1000" selected>Once per 1 second</option>
+                                        <option value="500">Twice per second</option>
+                                        <option value="200">5 times per second (Recommended)</option>
+                                        <option value="100">Continuous (High CPU)</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">Paper Spectrogram Audio</div>
+          <div class="box-body">
+            <section>
+                <!-- Paper Spectrogram Audio Capture -->
+                <div>
+                    <div>
+                        <div>
+                            <span id="spectrogram-ready-pill">No paper</span>
+                            <p>Captures the detected sheet, rectifies the central area between the four markers, treats black as high amplitude, and synthesizes one second of audio.</p>
+                        </div>
+
+                        <div>
+                            <strong>Sheet mapping</strong>
+
+                            <div>
+                                <label>
+                                    <span>Capture Target Sheet</span>
+                                    <select id="capture-sheet-select"></select>
+                                </label>
+                            </div>
+
+                            <strong>Spectrogram image settings</strong>
+
+                            <div>
+                                <label>
+                                    Min Frequency
+                                    <input type="number" id="spectrogram-min-freq" min="20" max="20000" value="80">
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    Max Frequency
+                                    <input type="number" id="spectrogram-max-freq" min="20" max="20000" value="4000">
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    Frequency Scale
+                                    <select id="spectrogram-frequency-scale">
+                                        <option value="linear" selected>Linear</option>
+                                        <option value="log">Logarithmic</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    Paper Freq Direction
+                                    <select id="spectrogram-frequency-direction">
+                                        <option value="left-low">Low on left edge</option>
+                                        <option value="right-low" selected>Low on right edge</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    Image Cleanup
+                                    <select id="spectrogram-processing-mode">
+                                        <option value="adaptive-bw" selected>Adaptive B&amp;W cleanup</option>
+                                        <option value="edge-assisted">Edge-assisted extraction</option>
+                                        <option value="hard-threshold">Hard global threshold</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    Black Cutoff
+                                    <input type="number" id="spectrogram-black-cutoff" min="0.10" max="0.80" step="0.01" value="0.80">
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    Remove speckles
+                                    <input type="checkbox" id="spectrogram-despeckle" checked>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    Fill tiny gaps
+                                    <input type="checkbox" id="spectrogram-fill-gaps" checked>
+                                </label>
+                            </div>
+
+                            <div>
+                                <button id="capture-spectrogram-btn" disabled>Capture Sheet and Build Audio</button>
+                            </div>
+
+                            <div>
+                                <canvas id="spectrogram-preview" width="256" height="128"></canvas>
+                                <audio id="spectrogram-audio" controls></audio>
+                                <a id="spectrogram-download" download="paper-spectrogram.wav">Download WAV</a>
+                            </div>
+
+                            <div id="spectrogram-status">Waiting for projected paper.</div>
+
+                            <div>
+                                <strong>Uploaded audio mapping</strong>
+                                <label>
+                                    <span>Uploaded Audio Target Sheet</span>
+                                    <select id="uploaded-audio-sheet-select"></select>
+                                </label>
+                                <label>
+                                    <span>Audio File</span>
+                                    <input type="file" id="uploaded-audio-file" accept="audio/*">
+                                </label>
+                                <button id="upload-audio-spectrogram-btn">Upload Audio and Build Spectrogram</button>
+                                <div id="uploaded-audio-status">No uploaded audio mapped.</div>
+                            </div>
+
+                            <div id="finger-playback-status">Finger playback: create or upload audio, then place the index fingertip over the yellow spectrogram area.</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+          </div>
+        </div>
+
+        <div class="box">
+          <div class="box-title">System Telemetry</div>
+          <div class="box-body">
+            <section>
+                <!-- Realtime Telemetry Feed -->
+                <div>
+                    <!-- Coordinates telemetry box -->
+                    <div>
+                        <div id="telemetry-log">
+                            <span>Bring your hand or an ArUco code marker in front of the camera...</span>
+                        </div>
+                    </div>
+                </div>
+            </section>
+          </div>
+        </div>
+      </div>
+
+        <div id="content">
+            <section>
+                <div>
+                    <div>
+                        <!-- Frame Title & FPS -->
+                        <div class="live-feed-header">
+                            <span>Workspace Live Feed</span>
+                            <span id="fps-counter">FPS: Calculating...</span>
+                        </div>
+
+                        <!-- Video & Overlay Sandbox -->
+                        <div class="video-container">
+                            <!-- Hidden source video (Muted and playsinline are mandatory for browser autoplay stability) -->
+                            <video id="webcam-source" class="hidden" autoplay playsinline muted></video>
+                            <!-- Display Canvas. The tracking and display feeds are intentionally unmirrored. -->
+                            <canvas id="output-canvas"></canvas>
+
+                            <!-- Splash Screen (Initial loading or permissions blocked) -->
+                            <div id="splash-screen">
+                                <h3 id="splash-title">Downloading Machine Learning Models...</h3>
+                                <p id="splash-desc">Please grant camera permissions when prompted. All processing takes place locally inside your browser.</p>
+                                <button id="retry-camera-btn">Grant Camera Access</button>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Real-time Metrics Grid -->
+                    <div>
+                        <table>
+                            <thead>
+                            <tr>
+                                <th scope="col">Hands Detected</th>
+                                <th scope="col">Markers Tracked</th>
+                                <th scope="col">Paper Surface</th>
+                                <th scope="col">Handedness</th>
+                                <th scope="col">Latency</th>
+                            </tr>
+                            </thead>
+                            <tbody>
+                            <tr>
+                                <td id="metric-hands">0</td>
+                                <td id="metric-markers">0</td>
+                                <td id="metric-paper-status">Not Found</td>
+                                <td id="metric-handedness">-</td>
+                                <td id="metric-latency">0</td>
+                            </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+	    </div>
+    </div>
+
+    <div id="footer">
+        (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧
+    </div>
+  </div>
+
+  <!-- Main JavaScript implementation -->
+  <script>
+      // System Global State
+      let videoElement, canvasElement, canvasCtx;
+      let handsModel = null;
+      let cameraInstance = null;
+      let lastProcessedTime = performance.now();
+      let lastFrameSubmitTime = 0;
+      let frameTimes = [];
+
+      // ArUco Tracking State Variables
+      let markerDetector = null;
+      let trackedMarkers = [];
+      let lastMarkerTime = 0;
+
+      // Temporal Smoothing / Hysteresis persistent tracking states
+      let persistentMarkers = {};
+
+      // High performance offscreen CV canvas at full resolution for high sub-pixel precision
+      let cvCanvas = document.createElement('canvas');
+      let cvCtx = cvCanvas.getContext('2d');
+
+      // ---------------------------------------------------------------------
+      // Easy sheet definition section
+      // ---------------------------------------------------------------------
+      // Define each physical sheet by four unique OpenCV DICT_5X5_50 marker IDs.
+      // Marker positions are in printed-sheet coordinates.
+      // Add more entries here to support multiple uniquely labeled sheets.
+      const DEFINED_SHEETS = [
+        {
+          id: 'spectrogram-sheet',
+          label: 'Spectrogram Sheet',
+          markers: {
+            topLeft: 2,
+            topRight: 4,
+            bottomLeft: 1,
+            bottomRight: 3
+          }
+        },
+        {
+          id: 'thrush-sheet',
+          label: 'Thrush Sheet',
+          markers: {
+            topLeft: 5,
+            topRight: 6,
+            bottomLeft: 7,
+            bottomRight: 8
+          }
+        }
+      ];
+
+      // Latest detected sheet geometries, keyed by DEFINED_SHEETS[].id.
+      let latestDetectedSheetGeometries = new Map();
+
+      // Per-sheet spectrogram/audio mappings. A mapped sheet can come either from
+      // a captured paper drawing or from an uploaded audio file transformed to a spectrogram.
+      let sheetAudioStates = new Map();
+      let spectrogramAudioURL = null;
+      let activeFingerSpectrogramSheetId = null;
+      let activeFingerSpectrogramVersion = 0;
+
+      // Per-sheet tracking recovery state. When one to three markers are occluded,
+      // a sheet can reuse its last full-sheet marker pose if visible markers remain stable.
+      let sheetTrackingStates = new Map();
+      const PAPER_OCCLUSION_PIXEL_LIMIT = 20;
+
+      // Web Audio oscillator bank used for live index-finger spectrogram scrubbing.
+      let fingerSpectrogramSynth = null;
+
+      // Audio Context used by paper spectrogram playback.
+      let audioCtx = null;
+
+      // Toast Alert helper
+      function showToast(message, type = 'info') {
+        const toast = document.createElement('div');
+        toast.className = `p-4 rounded-xl border shadow-xl flex items-center gap-3 transform translate-y-2 opacity-0 transition duration-300 pointer-events-auto max-w-sm ${
+          type === 'error'
+            ? 'bg-rose-950/90 border-rose-800/50 text-rose-200'
+            : 'bg-slate-900/90 border-slate-800 text-slate-200'
+        }`;
+
+        const icon = type === 'error'
+          ? `<svg class="w-5 h-5 text-rose-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>`
+          : `<svg class="w-5 h-5 text-purple-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+
+        toast.innerHTML = `${icon}<p class="text-xs font-medium">${message}</p>`;
+        const container = document.getElementById('toast-container');
+        if (container) {
+          container.appendChild(toast);
+          // Animate entry
+          setTimeout(() => {
+            toast.classList.remove('translate-y-2', 'opacity-0');
+          }, 50);
+
+          // Dismiss timer
+          setTimeout(() => {
+            toast.classList.add('opacity-0', 'translate-y-2');
+            setTimeout(() => toast.remove(), 300);
+          }, 4000);
+        }
+      }
+
+      // Audio context initialization for paper spectrogram playback.
+      function initSynth() {
+        if (audioCtx) return;
+        try {
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          audioCtx = new AudioContextClass();
+        } catch (err) {
+          console.error("Audio API initialization failed:", err);
+        }
+      }
+
+      // Draw customizable lines and structures
+      function customDrawSkeleton(canvasCtx, landmarks, connections, color) {
+        if (!connections) return;
+        canvasCtx.save();
+        canvasCtx.strokeStyle = color;
+        canvasCtx.lineWidth = 3.5;
+        canvasCtx.lineCap = 'round';
+
+        for (const connection of connections) {
+          const fromIdx = connection[0];
+          const toIdx = connection[1];
+          const fromNode = landmarks[fromIdx];
+          const toNode = landmarks[toIdx];
+
+          if (fromNode && toNode) {
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(fromNode.x * canvasElement.width, fromNode.y * canvasElement.height);
+            canvasCtx.lineTo(toNode.x * canvasElement.width, toNode.y * canvasElement.height);
+            canvasCtx.stroke();
+          }
+        }
+        canvasCtx.restore();
+      }
+
+
+
+      // ---------------------------------------------------------------------
+      // Paper geometry and spectrogram-to-audio helpers
+      // ---------------------------------------------------------------------
+      function getSheetMarkerIds(sheetDef) {
+        return [
+          sheetDef.markers.topLeft,
+          sheetDef.markers.topRight,
+          sheetDef.markers.bottomLeft,
+          sheetDef.markers.bottomRight
+        ];
+      }
+
+      function findDefinedSheet(sheetId) {
+        return DEFINED_SHEETS.find(sheet => sheet.id === sheetId) || DEFINED_SHEETS[0] || null;
+      }
+
+      function getConfiguredSheetMarkerIdSet() {
+        const ids = new Set();
+        for (const sheet of DEFINED_SHEETS) {
+          for (const markerId of getSheetMarkerIds(sheet)) ids.add(markerId);
+        }
+        return ids;
+      }
+
+      function validateDefinedSheets() {
+        const seenSheetIds = new Set();
+        for (const sheet of DEFINED_SHEETS) {
+          if (!sheet.id || seenSheetIds.has(sheet.id)) {
+            console.warn('Each defined sheet must have a unique id.', sheet);
+          }
+          seenSheetIds.add(sheet.id);
+
+          const markerIds = getSheetMarkerIds(sheet);
+          const uniqueMarkerIds = new Set(markerIds);
+          if (uniqueMarkerIds.size !== 4) {
+            console.warn(`Sheet "${sheet.label || sheet.id}" must use four unique marker IDs.`, markerIds);
+          }
+          for (const markerId of markerIds) {
+            if (!Number.isInteger(markerId) || markerId < 0 || markerId > 49) {
+              console.warn(`Sheet "${sheet.label || sheet.id}" uses marker ID ${markerId}; the built-in detector supports OpenCV DICT_5X5_50 IDs 0-49.`);
+            }
+          }
+        }
+      }
+
+      function populateSheetSelect(selectId) {
+        const select = document.getElementById(selectId);
+        if (!select) return;
+        const previous = select.value;
+        select.innerHTML = '';
+        for (const sheet of DEFINED_SHEETS) {
+          const option = document.createElement('option');
+          option.value = sheet.id;
+          option.textContent = sheet.label || sheet.id;
+          select.appendChild(option);
+        }
+        if (previous && DEFINED_SHEETS.some(sheet => sheet.id === previous)) {
+          select.value = previous;
+        }
+      }
+
+      function populateDefinedSheetControls() {
+        validateDefinedSheets();
+        populateSheetSelect('capture-sheet-select');
+        populateSheetSelect('uploaded-audio-sheet-select');
+      }
+
+      function getFreshSheetGeometry(sheetId, maxAgeMs = 1800) {
+        const geometry = latestDetectedSheetGeometries.get(sheetId);
+        if (!geometry || performance.now() - geometry.lastSeen > maxAgeMs) return null;
+        return geometry;
+      }
+
+      function getSelectedCaptureSheet() {
+        const select = document.getElementById('capture-sheet-select');
+        return findDefinedSheet(select ? select.value : null);
+      }
+
+      function getSelectedUploadSheet() {
+        const select = document.getElementById('uploaded-audio-sheet-select');
+        return findDefinedSheet(select ? select.value : null);
+      }
+
+      function markerCenter(marker) {
+        const cx = marker.corners.reduce((sum, p) => sum + p.x, 0) / marker.corners.length;
+        const cy = marker.corners.reduce((sum, p) => sum + p.y, 0) / marker.corners.length;
+        return { x: cx, y: cy };
+      }
+
+      function selectMarkerCornerByDistance(marker, referencePoint, mode) {
+        let selected = marker.corners[0];
+        let selectedDistance = mode === 'nearest' ? Infinity : -Infinity;
+        for (const corner of marker.corners) {
+          const d = Math.hypot(corner.x - referencePoint.x, corner.y - referencePoint.y);
+          if ((mode === 'nearest' && d < selectedDistance) || (mode === 'farthest' && d > selectedDistance)) {
+            selected = corner;
+            selectedDistance = d;
+          }
+        }
+        return { x: selected.x, y: selected.y };
+      }
+
+      function buildPaperGeometryFromSheetMarkers(sheetDef, markers) {
+        const byId = new Map(markers.map(marker => [marker.id, marker]));
+        const markerTopLeft = byId.get(sheetDef.markers.topLeft);
+        const markerTopRight = byId.get(sheetDef.markers.topRight);
+        const markerBottomLeft = byId.get(sheetDef.markers.bottomLeft);
+        const markerBottomRight = byId.get(sheetDef.markers.bottomRight);
+        if (!markerTopLeft || !markerTopRight || !markerBottomLeft || !markerBottomRight) return null;
+
+        const orderedMarkers = [markerTopLeft, markerTopRight, markerBottomRight, markerBottomLeft];
+        const allCorners = orderedMarkers.flatMap(marker => marker.corners);
+        const centroid = {
+          x: allCorners.reduce((sum, p) => sum + p.x, 0) / allCorners.length,
+          y: allCorners.reduce((sum, p) => sum + p.y, 0) / allCorners.length
+        };
+
+        // Corners are ordered in printed-sheet coordinates: TL, TR, BR, BL.
+        // The outer quad is useful for the visible sheet overlay.
+        const outerQuad = [
+          selectMarkerCornerByDistance(markerTopLeft, centroid, 'farthest'),
+          selectMarkerCornerByDistance(markerTopRight, centroid, 'farthest'),
+          selectMarkerCornerByDistance(markerBottomRight, centroid, 'farthest'),
+          selectMarkerCornerByDistance(markerBottomLeft, centroid, 'farthest')
+        ];
+
+        // The inner quad excludes the ArUco markers. This is the actual image region
+        // interpreted as the audio spectrogram, so marker graphics are not turned into sound.
+        const contentQuad = [
+          selectMarkerCornerByDistance(markerTopLeft, centroid, 'nearest'),
+          selectMarkerCornerByDistance(markerTopRight, centroid, 'nearest'),
+          selectMarkerCornerByDistance(markerBottomRight, centroid, 'nearest'),
+          selectMarkerCornerByDistance(markerBottomLeft, centroid, 'nearest')
+        ];
+
+        const markerInfos = orderedMarkers.map(marker => ({ ...marker, ...markerCenter(marker) }));
+        return {
+          sheetId: sheetDef.id,
+          label: sheetDef.label || sheetDef.id,
+          markerIds: getSheetMarkerIds(sheetDef),
+          outerQuad,
+          contentQuad,
+          markerInfos,
+          center: centroid,
+          lastSeen: performance.now()
+        };
+      }
+
+      function cloneTrackedMarker(marker, overrides = {}) {
+        return {
+          id: marker.id,
+          corners: marker.corners.map(corner => ({ x: corner.x, y: corner.y })),
+          cx: Number.isFinite(marker.cx) ? marker.cx : markerCenter(marker).x,
+          cy: Number.isFinite(marker.cy) ? marker.cy : markerCenter(marker).y,
+          decodeDistance: marker.decodeDistance,
+          lastSeen: marker.lastSeen,
+          predicted: Boolean(marker.predicted),
+          ...overrides
+        };
+      }
+
+      function getSheetTrackingState(sheetDef) {
+        if (!sheetTrackingStates.has(sheetDef.id)) {
+          sheetTrackingStates.set(sheetDef.id, {
+            lastHighConfidenceMarkers: null,
+            lastHighConfidenceTime: 0,
+            trackingMode: 'none',
+            missingIds: []
+          });
+        }
+        return sheetTrackingStates.get(sheetDef.id);
+      }
+
+      function resetSheetTrackingStates() {
+        sheetTrackingStates = new Map();
+        latestDetectedSheetGeometries = new Map();
+      }
+
+      function resolveSheetMarkersWithOcclusion(sheetDef, markers, now, markerFPSLimit = 1000) {
+        const requiredIds = getSheetMarkerIds(sheetDef);
+        const freshnessLimit = Math.max(250, markerFPSLimit + 140);
+        const state = getSheetTrackingState(sheetDef);
+
+        // Only markers detected within the current scan window count as visible.
+        // Older persistent detections are treated as occluded and are filled from
+        // the sheet's last high-confidence marker pose only after a stability test.
+        const freshById = new Map();
+        for (const marker of markers) {
+          if (!requiredIds.includes(marker.id)) continue;
+          if (now - marker.lastSeen > freshnessLimit) continue;
+          freshById.set(marker.id, marker);
+        }
+
+        const freshVisibleMarkers = requiredIds.map(id => freshById.get(id)).filter(Boolean);
+
+        if (freshVisibleMarkers.length === 4) {
+          state.lastHighConfidenceMarkers = requiredIds.map(id => cloneTrackedMarker(freshById.get(id), { predicted: false }));
+          state.lastHighConfidenceTime = now;
+          state.trackingMode = 'full';
+          state.missingIds = [];
+          return {
+            sheet: sheetDef,
+            markers: state.lastHighConfidenceMarkers.map(marker => cloneTrackedMarker(marker, { predicted: false })),
+            mode: 'full',
+            missingIds: []
+          };
+        }
+
+        if (freshVisibleMarkers.length >= 1 && freshVisibleMarkers.length <= 3 && state.lastHighConfidenceMarkers) {
+          const lastById = new Map(state.lastHighConfidenceMarkers.map(marker => [marker.id, marker]));
+          const missingIds = requiredIds.filter(id => !freshById.has(id));
+
+          const stableVisibleMarkers = freshVisibleMarkers.every(marker => {
+            const previous = lastById.get(marker.id);
+            if (!previous) return false;
+            const currentCenter = markerCenter(marker);
+            const previousCenter = markerCenter(previous);
+            return Math.hypot(currentCenter.x - previousCenter.x, currentCenter.y - previousCenter.y) <= PAPER_OCCLUSION_PIXEL_LIMIT;
+          });
+
+          if (missingIds.length >= 1 && missingIds.length <= 3 && stableVisibleMarkers) {
+            state.trackingMode = 'occlusion-hold';
+            state.missingIds = missingIds;
+            return {
+              sheet: sheetDef,
+              markers: requiredIds.map(id => {
+                const visible = freshById.get(id);
+                if (visible) return cloneTrackedMarker(visible, { predicted: false });
+                const held = lastById.get(id);
+                return cloneTrackedMarker(held, { predicted: true, lastSeen: now });
+              }),
+              mode: 'occlusion-hold',
+              missingIds
+            };
+          }
+        }
+
+        state.trackingMode = 'none';
+        state.missingIds = [];
+        return null;
+      }
+
+      function clamp01(value) {
+        return Math.max(0, Math.min(1, value));
+      }
+
+      function percentile(sortedValues, q) {
+        if (!sortedValues.length) return 0;
+        const idx = Math.max(0, Math.min(sortedValues.length - 1, Math.round(q * (sortedValues.length - 1))));
+        return sortedValues[idx];
+      }
+
+      function updateSpectrogramCaptureReady() {
+        const button = document.getElementById('capture-spectrogram-btn');
+        const pill = document.getElementById('spectrogram-ready-pill');
+        const selectedSheet = getSelectedCaptureSheet();
+        const geometry = selectedSheet ? getFreshSheetGeometry(selectedSheet.id) : null;
+        const isReady = Boolean(geometry);
+        if (button) button.disabled = !isReady;
+        if (pill) {
+          const label = selectedSheet ? (selectedSheet.label || selectedSheet.id) : 'Sheet';
+          pill.innerText = isReady ? `${label} ready` : `${label} not found`;
+          pill.className = isReady
+            ? 'text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/10 text-cyan-300 border border-cyan-500/20'
+            : 'text-[10px] px-2 py-0.5 rounded-full bg-rose-500/10 text-rose-300 border border-rose-500/20';
+        }
+      }
+
+      function drawQuad(ctx, quad, strokeStyle, lineWidth = 2, dash = []) {
+        if (!quad || quad.length !== 4) return;
+        ctx.save();
+        ctx.strokeStyle = strokeStyle;
+        ctx.lineWidth = lineWidth;
+        ctx.setLineDash(dash);
+        ctx.beginPath();
+        ctx.moveTo(quad[0].x, quad[0].y);
+        ctx.lineTo(quad[1].x, quad[1].y);
+        ctx.lineTo(quad[2].x, quad[2].y);
+        ctx.lineTo(quad[3].x, quad[3].y);
+        ctx.closePath();
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      function getCurrentVideoFrameImageData() {
+        if (!videoElement || !canvasElement || videoElement.readyState < 2) return null;
+        if (cvCanvas.width !== canvasElement.width || cvCanvas.height !== canvasElement.height) {
+          cvCanvas.width = canvasElement.width;
+          cvCanvas.height = canvasElement.height;
+        }
+        cvCtx.save();
+        cvCtx.setTransform(1, 0, 0, 1, 0, 0);
+        cvCtx.clearRect(0, 0, cvCanvas.width, cvCanvas.height);
+        cvCtx.drawImage(videoElement, 0, 0, cvCanvas.width, cvCanvas.height);
+        cvCtx.restore();
+        return cvCtx.getImageData(0, 0, cvCanvas.width, cvCanvas.height);
+      }
+
+      function computeOtsuThreshold01(values) {
+        const bins = 256;
+        const hist = new Float64Array(bins);
+        for (let i = 0; i < values.length; i++) {
+          const b = Math.max(0, Math.min(bins - 1, Math.round(clamp01(values[i]) * (bins - 1))));
+          hist[b]++;
+        }
+
+        const total = values.length;
+        let sumAll = 0;
+        for (let i = 0; i < bins; i++) sumAll += i * hist[i];
+
+        let weightBackground = 0;
+        let sumBackground = 0;
+        let maxVariance = -1;
+        let best = 0.35;
+
+        for (let i = 0; i < bins; i++) {
+          weightBackground += hist[i];
+          if (weightBackground === 0) continue;
+          const weightForeground = total - weightBackground;
+          if (weightForeground === 0) break;
+
+          sumBackground += i * hist[i];
+          const meanBackground = sumBackground / weightBackground;
+          const meanForeground = (sumAll - sumBackground) / weightForeground;
+          const betweenVariance = weightBackground * weightForeground * Math.pow(meanBackground - meanForeground, 2);
+
+          if (betweenVariance > maxVariance) {
+            maxVariance = betweenVariance;
+            best = i / (bins - 1);
+          }
+        }
+        return best;
+      }
+
+      function computeSobelMagnitude01(values, width, height) {
+        const out = new Float32Array(values.length);
+        let maxValue = 1e-6;
+
+        for (let y = 1; y < height - 1; y++) {
+          for (let x = 1; x < width - 1; x++) {
+            const i00 = (y - 1) * width + (x - 1);
+            const i01 = (y - 1) * width + x;
+            const i02 = (y - 1) * width + (x + 1);
+            const i10 = y * width + (x - 1);
+            const i12 = y * width + (x + 1);
+            const i20 = (y + 1) * width + (x - 1);
+            const i21 = (y + 1) * width + x;
+            const i22 = (y + 1) * width + (x + 1);
+
+            const gx = -values[i00] + values[i02] - 2 * values[i10] + 2 * values[i12] - values[i20] + values[i22];
+            const gy = -values[i00] - 2 * values[i01] - values[i02] + values[i20] + 2 * values[i21] + values[i22];
+            const mag = Math.sqrt(gx * gx + gy * gy);
+            const idx = y * width + x;
+            out[idx] = mag;
+            if (mag > maxValue) maxValue = mag;
+          }
+        }
+
+        for (let i = 0; i < out.length; i++) out[i] = clamp01(out[i] / maxValue);
+        return out;
+      }
+
+      function countBinaryNeighbors(binary, width, height, x, y) {
+        let count = 0;
+        for (let dy = -1; dy <= 1; dy++) {
+          const yy = y + dy;
+          if (yy < 0 || yy >= height) continue;
+          for (let dx = -1; dx <= 1; dx++) {
+            const xx = x + dx;
+            if (xx < 0 || xx >= width) continue;
+            if (dx === 0 && dy === 0) continue;
+            count += binary[yy * width + xx] ? 1 : 0;
+          }
+        }
+        return count;
+      }
+
+      function removeSmallBlackComponents(binary, width, height, minArea = 4) {
+        const out = new Uint8Array(binary);
+        const visited = new Uint8Array(binary.length);
+        const stack = new Int32Array(binary.length);
+        const component = [];
+
+        for (let start = 0; start < binary.length; start++) {
+          if (!out[start] || visited[start]) continue;
+
+          component.length = 0;
+          let top = 0;
+          stack[top++] = start;
+          visited[start] = 1;
+          let minX = width, maxX = 0, minY = height, maxY = 0;
+
+          while (top > 0) {
+            const idx = stack[--top];
+            component.push(idx);
+            const x = idx % width;
+            const y = (idx / width) | 0;
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+
+            for (let dy = -1; dy <= 1; dy++) {
+              const yy = y + dy;
+              if (yy < 0 || yy >= height) continue;
+              for (let dx = -1; dx <= 1; dx++) {
+                const xx = x + dx;
+                if (xx < 0 || xx >= width) continue;
+                if (dx === 0 && dy === 0) continue;
+                const nidx = yy * width + xx;
+                if (out[nidx] && !visited[nidx]) {
+                  visited[nidx] = 1;
+                  stack[top++] = nidx;
+                }
+              }
+            }
+          }
+
+          const span = Math.max(maxX - minX + 1, maxY - minY + 1);
+          if (component.length < minArea && span < 4) {
+            for (const idx of component) out[idx] = 0;
+          }
+        }
+
+        return out;
+      }
+
+      function cleanBinarySpectrogram(binary, width, height, options = {}) {
+        let out = new Uint8Array(binary);
+
+        if (options.despeckle) {
+          const pass = new Uint8Array(out.length);
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const idx = y * width + x;
+              const neighbors = countBinaryNeighbors(out, width, height, x, y);
+              if (out[idx]) {
+                // Remove isolated black sensor noise and faint shadow artifacts.
+                pass[idx] = neighbors >= 2 ? 1 : 0;
+              } else {
+                pass[idx] = 0;
+              }
+            }
+          }
+          out = removeSmallBlackComponents(pass, width, height, 4);
+        }
+
+        if (options.fillGaps) {
+          const pass = new Uint8Array(out.length);
+          for (let y = 0; y < height; y++) {
+            for (let x = 0; x < width; x++) {
+              const idx = y * width + x;
+              const neighbors = countBinaryNeighbors(out, width, height, x, y);
+              if (out[idx]) {
+                pass[idx] = 1;
+              } else {
+                // Fill pinholes inside otherwise dark strokes without turning broad light paper areas into sound.
+                pass[idx] = neighbors >= 6 ? 1 : 0;
+              }
+            }
+          }
+          out = pass;
+        }
+
+        return out;
+      }
+
+      function extractSpectrogramFromPaper(frameData, paperGeometry, options = {}) {
+        const timeBins = options.timeBins || 256;
+        const freqBins = options.freqBins || 128;
+        const direction = options.direction || 'left-low';
+        const samplingInset = options.samplingInset ?? 0.015;
+        const processingMode = options.processingMode || 'adaptive-bw';
+        const userCutoff = Number.isFinite(options.blackCutoff) ? clamp01(options.blackCutoff) : 0.34;
+        const mapPoint = unitSquareToQuadMapper(paperGeometry.contentQuad);
+        if (!mapPoint) throw new Error('Could not build paper perspective transform.');
+
+        const grayValues = new Float32Array(timeBins * freqBins);
+        const sortedGray = [];
+
+        for (let fy = 0; fy < freqBins; fy++) {
+          const yNorm = (fy + 0.5) / freqBins; // 0 at preview top, 1 at preview bottom
+          // Preview top is high frequency and preview bottom is low frequency.
+          const freqNormLowToHigh = 1 - yNorm;
+          let paperU = direction === 'left-low' ? freqNormLowToHigh : 1 - freqNormLowToHigh;
+          paperU = samplingInset + paperU * (1 - 2 * samplingInset);
+
+          for (let tx = 0; tx < timeBins; tx++) {
+            let paperV = (tx + 0.5) / timeBins; // t = 0 at the printed top edge, t = 1 at the printed bottom edge
+            paperV = samplingInset + paperV * (1 - 2 * samplingInset);
+            const p = mapPoint(paperU, paperV);
+            const gray = sampleGrayFromImageData(frameData, p.x, p.y);
+            const idx = fy * timeBins + tx;
+            grayValues[idx] = gray;
+            sortedGray.push(gray);
+          }
+        }
+
+        sortedGray.sort((a, b) => a - b);
+        // Contrast stretch using percentiles. This clamps uneven lighting on the paper
+        // before thresholding, so pale shadows in white regions do not become audio.
+        const blackReference = percentile(sortedGray, 0.02);
+        const whiteReference = percentile(sortedGray, 0.985);
+        const contrastRange = Math.max(12, whiteReference - blackReference);
+
+        const normalizedBlackness = new Float32Array(grayValues.length);
+        const normalizedLightness = new Float32Array(grayValues.length);
+        for (let i = 0; i < grayValues.length; i++) {
+          const lightness = clamp01((grayValues[i] - blackReference) / contrastRange);
+          normalizedLightness[i] = lightness;
+          normalizedBlackness[i] = clamp01(1 - lightness);
+        }
+
+        const edgeMagnitude = computeSobelMagnitude01(normalizedLightness, timeBins, freqBins);
+        const scores = new Float32Array(grayValues.length);
+        const edgeWeight = processingMode === 'edge-assisted' ? 0.34 : 0.10;
+        for (let i = 0; i < scores.length; i++) {
+          // Gamma increases separation between black ink/pencil and gray camera noise.
+          const contrastEnhanced = Math.pow(normalizedBlackness[i], 1.18);
+          scores[i] = clamp01(contrastEnhanced + edgeMagnitude[i] * edgeWeight);
+        }
+
+        const otsu = computeOtsuThreshold01(scores);
+        let threshold = userCutoff;
+        if (processingMode === 'adaptive-bw') {
+          threshold = Math.max(userCutoff, Math.min(0.58, otsu * 0.92));
+        } else if (processingMode === 'edge-assisted') {
+          threshold = Math.max(userCutoff * 0.86, Math.min(0.52, otsu * 0.82));
+        }
+
+        let binary = new Uint8Array(grayValues.length);
+        for (let i = 0; i < scores.length; i++) {
+          const edgeCondition = processingMode === 'edge-assisted' && edgeMagnitude[i] > 0.32 && normalizedBlackness[i] > threshold * 0.42;
+          binary[i] = (scores[i] >= threshold || edgeCondition) ? 1 : 0;
+        }
+
+        binary = cleanBinarySpectrogram(binary, timeBins, freqBins, {
+          despeckle: options.despeckle !== false,
+          fillGaps: options.fillGaps !== false
+        });
+
+        const amplitudes = new Float32Array(timeBins * freqBins);
+        const preview = new ImageData(timeBins, freqBins);
+
+        for (let i = 0; i < grayValues.length; i++) {
+          // Audio amplitude is gated by the cleaned B&W image. This prevents light-region
+          // camera noise from becoming a low-level hiss while still preserving dark-stroke intensity.
+          amplitudes[i] = binary[i] ? Math.max(0.55, Math.pow(scores[i], 0.75)) : 0;
+
+          const display = binary[i] ? 0 : 255;
+          const p = i * 4;
+          preview.data[p] = display;
+          preview.data[p + 1] = display;
+          preview.data[p + 2] = display;
+          preview.data[p + 3] = 255;
+        }
+
+        return {
+          amplitudes,
+          timeBins,
+          freqBins,
+          preview,
+          blackReference,
+          whiteReference,
+          threshold,
+          otsuThreshold: otsu,
+          processingMode
+        };
+      }
+
+      function smoothSpectrogramAmplitudes(amplitudes, timeBins, freqBins) {
+        const smoothed = new Float32Array(amplitudes.length);
+        for (let f = 0; f < freqBins; f++) {
+          for (let t = 0; t < timeBins; t++) {
+            let total = 0;
+            let weight = 0;
+            for (let df = -1; df <= 1; df++) {
+              const ff = f + df;
+              if (ff < 0 || ff >= freqBins) continue;
+              for (let dt = -1; dt <= 1; dt++) {
+                const tt = t + dt;
+                if (tt < 0 || tt >= timeBins) continue;
+                const w = (df === 0 && dt === 0) ? 4 : (df === 0 || dt === 0 ? 2 : 1);
+                total += amplitudes[ff * timeBins + tt] * w;
+                weight += w;
+              }
+            }
+            smoothed[f * timeBins + t] = total / weight;
+          }
+        }
+        return smoothed;
+      }
+
+      function frequencyForBin(bin, binCount, minFreq, maxFreq, scale) {
+        const n = binCount <= 1 ? 0 : bin / (binCount - 1);
+        if (scale === 'log') {
+          return minFreq * Math.pow(maxFreq / minFreq, n);
+        }
+        return minFreq + n * (maxFreq - minFreq);
+      }
+
+      function pointToUnitSquare(point, quad) {
+        if (!point || !quad || quad.length !== 4) return null;
+        const mapPoint = unitSquareToQuadMapper(quad);
+        if (!mapPoint) return null;
+
+        // Newton solve for the inverse of the perspective quad mapper.
+        let u = 0.5;
+        let v = 0.5;
+        for (let i = 0; i < 12; i++) {
+          const mapped = mapPoint(u, v);
+          const fx = mapped.x - point.x;
+          const fy = mapped.y - point.y;
+          if (Math.hypot(fx, fy) < 0.25) break;
+
+          const eps = 1e-4;
+          const mappedU = mapPoint(u + eps, v);
+          const mappedV = mapPoint(u, v + eps);
+          const j11 = (mappedU.x - mapped.x) / eps;
+          const j21 = (mappedU.y - mapped.y) / eps;
+          const j12 = (mappedV.x - mapped.x) / eps;
+          const j22 = (mappedV.y - mapped.y) / eps;
+          const det = j11 * j22 - j12 * j21;
+          if (Math.abs(det) < 1e-9) return null;
+
+          const du = ( j22 * fx - j12 * fy) / det;
+          const dv = (-j21 * fx + j11 * fy) / det;
+          u -= du;
+          v -= dv;
+          if (!Number.isFinite(u) || !Number.isFinite(v)) return null;
+        }
+
+        const tolerance = 0.025;
+        if (u < -tolerance || u > 1 + tolerance || v < -tolerance || v > 1 + tolerance) return null;
+        return { u: clamp01(u), v: clamp01(v) };
+      }
+
+      function setFingerPlaybackStatus(message, state = 'idle') {
+        const el = document.getElementById('finger-playback-status');
+        if (!el) return;
+        el.innerText = message;
+        const colorClass = state === 'active'
+          ? 'text-cyan-300'
+          : state === 'waiting'
+            ? 'text-amber-300'
+            : 'text-slate-500';
+        el.className = `text-[11px] ${colorClass} font-mono`;
+      }
+
+      function shutdownFingerSpectrogramSynth() {
+        if (!fingerSpectrogramSynth) return;
+        try {
+          fingerSpectrogramSynth.outputGain.gain.setValueAtTime(0, audioCtx ? audioCtx.currentTime : 0);
+          for (const osc of fingerSpectrogramSynth.oscillators) {
+            try { osc.stop(); } catch (_) {}
+            try { osc.disconnect(); } catch (_) {}
+          }
+          for (const gain of fingerSpectrogramSynth.gains) {
+            try { gain.disconnect(); } catch (_) {}
+          }
+          try { fingerSpectrogramSynth.outputGain.disconnect(); } catch (_) {}
+        } catch (err) {
+          console.warn('Finger spectrogram synth shutdown issue:', err);
+        }
+        fingerSpectrogramSynth = null;
+        activeFingerSpectrogramSheetId = null;
+        activeFingerSpectrogramVersion = 0;
+      }
+
+      function setSheetSpectrogramState(sheetId, spectrogramData, metadata = {}) {
+        const previous = sheetAudioStates.get(sheetId);
+        const version = previous ? previous.version + 1 : 1;
+        sheetAudioStates.set(sheetId, {
+          sheetId,
+          spectrogramData,
+          version,
+          source: metadata.source || 'spectrogram',
+          fileName: metadata.fileName || '',
+          createdAt: performance.now()
+        });
+      }
+
+      function prepareFingerSpectrogramSynth(sheetId, spectrogramData, version) {
+        if (!sheetId || !spectrogramData) return;
+        if (!audioCtx) initSynth();
+        if (!audioCtx) return;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        shutdownFingerSpectrogramSynth();
+
+        const oscillatorCount = Math.min(64, spectrogramData.freqBins);
+        const outputGain = audioCtx.createGain();
+        outputGain.gain.setValueAtTime(0, audioCtx.currentTime);
+        outputGain.connect(audioCtx.destination);
+
+        const oscillators = [];
+        const gains = [];
+        const binIndices = [];
+
+        for (let i = 0; i < oscillatorCount; i++) {
+          const bin = oscillatorCount <= 1
+            ? 0
+            : Math.round(i * (spectrogramData.freqBins - 1) / (oscillatorCount - 1));
+          const osc = audioCtx.createOscillator();
+          const gain = audioCtx.createGain();
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(
+            frequencyForBin(bin, spectrogramData.freqBins, spectrogramData.minFreq, spectrogramData.maxFreq, spectrogramData.scale),
+            audioCtx.currentTime
+          );
+          gain.gain.setValueAtTime(0, audioCtx.currentTime);
+          osc.connect(gain);
+          gain.connect(outputGain);
+          osc.start();
+          oscillators.push(osc);
+          gains.push(gain);
+          binIndices.push(bin);
+        }
+
+        fingerSpectrogramSynth = {
+          outputGain,
+          oscillators,
+          gains,
+          binIndices,
+          amplitudeScale: 0.20 / Math.max(1, Math.sqrt(oscillatorCount)),
+          active: false
+        };
+        activeFingerSpectrogramSheetId = sheetId;
+        activeFingerSpectrogramVersion = version;
+      }
+
+      function sampleSpectrogramAmplitudeAtTime(spectrogramData, freqBin, timeNorm) {
+        const timePosition = clamp01(timeNorm) * (spectrogramData.timeBins - 1);
+        const t0 = Math.floor(timePosition);
+        const t1 = Math.min(spectrogramData.timeBins - 1, t0 + 1);
+        const blend = timePosition - t0;
+        const a0 = spectrogramData.amplitudes[freqBin * spectrogramData.timeBins + t0];
+        const a1 = spectrogramData.amplitudes[freqBin * spectrogramData.timeBins + t1];
+        return a0 + (a1 - a0) * blend;
+      }
+
+      function getMappedSheetCount() {
+        let count = 0;
+        for (const sheet of DEFINED_SHEETS) {
+          if (sheetAudioStates.has(sheet.id)) count++;
+        }
+        return count;
+      }
+
+      function updateFingerSpectrogramPlayback(indexTipPoint, sheetGeometries) {
+        const mappedSheetCount = getMappedSheetCount();
+        if (!indexTipPoint || !sheetGeometries || sheetGeometries.length === 0 || mappedSheetCount === 0) {
+          if (fingerSpectrogramSynth && audioCtx) {
+            fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.025);
+            fingerSpectrogramSynth.active = false;
+          }
+          if (mappedSheetCount > 0) {
+            setFingerPlaybackStatus('Finger playback ready: place index fingertip over a mapped sheet.', 'waiting');
+          }
+          return null;
+        }
+
+        let selected = null;
+        for (const geometry of sheetGeometries) {
+          const state = sheetAudioStates.get(geometry.sheetId);
+          if (!state) continue;
+          const uv = pointToUnitSquare(indexTipPoint, geometry.contentQuad);
+          if (uv) {
+            selected = { geometry, state, uv };
+            break;
+          }
+        }
+
+        if (!selected) {
+          if (fingerSpectrogramSynth && audioCtx) {
+            fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.025);
+            fingerSpectrogramSynth.active = false;
+          }
+          setFingerPlaybackStatus('Finger playback ready: index fingertip is outside mapped sheet audio areas.', 'waiting');
+          return null;
+        }
+
+        const { geometry, state, uv } = selected;
+        const spectrogramData = state.spectrogramData;
+        if (!fingerSpectrogramSynth || activeFingerSpectrogramSheetId !== geometry.sheetId || activeFingerSpectrogramVersion !== state.version) {
+          prepareFingerSpectrogramSynth(geometry.sheetId, spectrogramData, state.version);
+        }
+        if (!fingerSpectrogramSynth || !audioCtx) return null;
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const timeNorm = uv.v; // Long side of the printed sheet is the time axis.
+        const now = audioCtx.currentTime;
+        for (let i = 0; i < fingerSpectrogramSynth.gains.length; i++) {
+          const bin = fingerSpectrogramSynth.binIndices[i];
+          const amp = sampleSpectrogramAmplitudeAtTime(spectrogramData, bin, timeNorm);
+          const targetGain = amp > 0.01 ? amp * fingerSpectrogramSynth.amplitudeScale : 0;
+          fingerSpectrogramSynth.gains[i].gain.setTargetAtTime(targetGain, now, 0.018);
+        }
+        fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(0.85, now, 0.025);
+        fingerSpectrogramSynth.active = true;
+
+        const durationSeconds = spectrogramData.durationSeconds || 1;
+        const elapsedMs = Math.round(timeNorm * durationSeconds * 1000);
+        const totalMs = Math.round(durationSeconds * 1000);
+        setFingerPlaybackStatus(`Finger playback active on ${geometry.label}: t=${elapsedMs} ms of ${totalMs} ms.`, 'active');
+        return { inside: true, sheetId: geometry.sheetId, geometry, timeNorm, u: uv.u, v: uv.v };
+      }
+
+      function drawFingerTimeCursor(ctx, paperGeometry, playbackState, indexTipPoint) {
+        if (!playbackState || !paperGeometry) return;
+        const mapPoint = unitSquareToQuadMapper(paperGeometry.contentQuad);
+        if (!mapPoint) return;
+        const a = mapPoint(0, playbackState.timeNorm);
+        const b = mapPoint(1, playbackState.timeNorm);
+
+        ctx.save();
+        ctx.strokeStyle = '#f97316';
+        ctx.lineWidth = 4;
+        ctx.setLineDash([]);
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+
+        if (indexTipPoint) {
+          ctx.fillStyle = 'rgba(249, 115, 22, 0.65)';
+          ctx.beginPath();
+          ctx.arc(indexTipPoint.x, indexTipPoint.y, 11, 0, 2 * Math.PI);
+          ctx.fill();
+          ctx.strokeStyle = '#ffffff';
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+
+      function synthesizeAudioFromSpectrogram(amplitudes, timeBins, freqBins, options = {}) {
+        const sampleRate = options.sampleRate || 44100;
+        const durationSeconds = options.durationSeconds || 1;
+        const minFreq = Math.max(20, options.minFreq || 80);
+        const maxFreq = Math.max(minFreq + 1, options.maxFreq || 4000);
+        const scale = options.scale || 'linear';
+        const samples = Math.max(1, Math.round(sampleRate * durationSeconds));
+        const output = new Float32Array(samples);
+        const phase = new Float64Array(freqBins);
+        const phaseInc = new Float64Array(freqBins);
+        const twoPi = Math.PI * 2;
+
+        for (let f = 0; f < freqBins; f++) {
+          const freq = frequencyForBin(f, freqBins, minFreq, maxFreq, scale);
+          phase[f] = (f * 0.61803398875 % 1) * twoPi; // deterministic phase spread
+          phaseInc[f] = twoPi * freq / sampleRate;
+        }
+
+        for (let n = 0; n < samples; n++) {
+          const tPosition = samples <= 1 ? 0 : (n / (samples - 1)) * (timeBins - 1);
+          const t0 = Math.floor(tPosition);
+          const t1 = Math.min(timeBins - 1, t0 + 1);
+          const blend = tPosition - t0;
+          let value = 0;
+
+          for (let f = 0; f < freqBins; f++) {
+            const a0 = amplitudes[f * timeBins + t0];
+            const a1 = amplitudes[f * timeBins + t1];
+            const amp = a0 + (a1 - a0) * blend;
+            if (amp > 0.006) value += Math.sin(phase[f]) * amp;
+
+            phase[f] += phaseInc[f];
+            if (phase[f] > twoPi) phase[f] -= twoPi;
+          }
+
+          output[n] = value;
+        }
+
+        // Short fade to suppress start/end clicks.
+        const fadeSamples = Math.min(Math.round(sampleRate * 0.01), Math.floor(samples / 2));
+        for (let i = 0; i < fadeSamples; i++) {
+          const gain = i / Math.max(1, fadeSamples - 1);
+          output[i] *= gain;
+          output[samples - 1 - i] *= gain;
+        }
+
+        let peak = 0;
+        for (let i = 0; i < output.length; i++) peak = Math.max(peak, Math.abs(output[i]));
+        if (peak > 1e-6) {
+          const gain = 0.86 / peak;
+          for (let i = 0; i < output.length; i++) output[i] *= gain;
+        }
+
+        return { samples: output, sampleRate };
+      }
+
+      function encodeWav16(samples, sampleRate) {
+        const bytesPerSample = 2;
+        const blockAlign = bytesPerSample;
+        const buffer = new ArrayBuffer(44 + samples.length * bytesPerSample);
+        const view = new DataView(buffer);
+
+        function writeString(offset, value) {
+          for (let i = 0; i < value.length; i++) view.setUint8(offset + i, value.charCodeAt(i));
+        }
+
+        writeString(0, 'RIFF');
+        view.setUint32(4, 36 + samples.length * bytesPerSample, true);
+        writeString(8, 'WAVE');
+        writeString(12, 'fmt ');
+        view.setUint32(16, 16, true);
+        view.setUint16(20, 1, true); // PCM
+        view.setUint16(22, 1, true); // mono
+        view.setUint32(24, sampleRate, true);
+        view.setUint32(28, sampleRate * blockAlign, true);
+        view.setUint16(32, blockAlign, true);
+        view.setUint16(34, 16, true);
+        writeString(36, 'data');
+        view.setUint32(40, samples.length * bytesPerSample, true);
+
+        let offset = 44;
+        for (let i = 0; i < samples.length; i++, offset += 2) {
+          const s = Math.max(-1, Math.min(1, samples[i]));
+          view.setInt16(offset, s < 0 ? s * 0x8000 : s * 0x7FFF, true);
+        }
+
+        return new Blob([view], { type: 'audio/wav' });
+      }
+
+      function renderSpectrogramPreview(imageData) {
+        const previewCanvas = document.getElementById('spectrogram-preview');
+        if (!previewCanvas) return;
+        previewCanvas.width = imageData.width;
+        previewCanvas.height = imageData.height;
+        const ctx = previewCanvas.getContext('2d');
+        ctx.putImageData(imageData, 0, 0);
+        previewCanvas.classList.remove('hidden');
+      }
+
+      function getSpectrogramFrequencySettings() {
+        const minFreqEl = document.getElementById('spectrogram-min-freq');
+        const maxFreqEl = document.getElementById('spectrogram-max-freq');
+        const scaleEl = document.getElementById('spectrogram-frequency-scale');
+        let minFreq = minFreqEl ? parseFloat(minFreqEl.value) : 80;
+        let maxFreq = maxFreqEl ? parseFloat(maxFreqEl.value) : 4000;
+        if (!Number.isFinite(minFreq)) minFreq = 80;
+        if (!Number.isFinite(maxFreq)) maxFreq = 4000;
+        minFreq = Math.max(20, Math.min(20000, minFreq));
+        maxFreq = Math.max(20, Math.min(20000, maxFreq));
+        if (maxFreq <= minFreq) maxFreq = Math.min(20000, minFreq + 100);
+        if (minFreqEl) minFreqEl.value = Math.round(minFreq);
+        if (maxFreqEl) maxFreqEl.value = Math.round(maxFreq);
+        return {
+          minFreq,
+          maxFreq,
+          scale: scaleEl ? scaleEl.value : 'linear'
+        };
+      }
+
+      function createSpectrogramPreviewFromAmplitudes(amplitudes, timeBins, freqBins) {
+        const preview = new ImageData(timeBins, freqBins);
+        for (let i = 0; i < amplitudes.length; i++) {
+          const display = 255 - Math.round(clamp01(amplitudes[i]) * 255);
+          const p = i * 4;
+          preview.data[p] = display;
+          preview.data[p + 1] = display;
+          preview.data[p + 2] = display;
+          preview.data[p + 3] = 255;
+        }
+        return preview;
+      }
+
+      function reverseBits(value, bits) {
+        let out = 0;
+        for (let i = 0; i < bits; i++) {
+          out = (out << 1) | (value & 1);
+          value >>= 1;
+        }
+        return out;
+      }
+
+      function fftInPlace(real, imag) {
+        const n = real.length;
+        const levels = Math.log2(n) | 0;
+        if ((1 << levels) !== n) throw new Error('FFT length must be a power of two.');
+
+        for (let i = 0; i < n; i++) {
+          const j = reverseBits(i, levels);
+          if (j > i) {
+            const tr = real[i];
+            real[i] = real[j];
+            real[j] = tr;
+            const ti = imag[i];
+            imag[i] = imag[j];
+            imag[j] = ti;
+          }
+        }
+
+        for (let size = 2; size <= n; size <<= 1) {
+          const halfSize = size >> 1;
+          const phaseStep = -2 * Math.PI / size;
+          for (let i = 0; i < n; i += size) {
+            for (let j = 0; j < halfSize; j++) {
+              const angle = phaseStep * j;
+              const wr = Math.cos(angle);
+              const wi = Math.sin(angle);
+              const even = i + j;
+              const odd = even + halfSize;
+              const tr = wr * real[odd] - wi * imag[odd];
+              const ti = wr * imag[odd] + wi * real[odd];
+              real[odd] = real[even] - tr;
+              imag[odd] = imag[even] - ti;
+              real[even] += tr;
+              imag[even] += ti;
+            }
+          }
+        }
+      }
+
+      function audioBufferToMonoFloat32(audioBuffer) {
+        const length = audioBuffer.length;
+        const channelCount = audioBuffer.numberOfChannels;
+        const mono = new Float32Array(length);
+        for (let ch = 0; ch < channelCount; ch++) {
+          const data = audioBuffer.getChannelData(ch);
+          for (let i = 0; i < length; i++) mono[i] += data[i] / channelCount;
+        }
+        return mono;
+      }
+
+      function transformAudioBufferToSpectrogram(audioBuffer, options = {}) {
+        const samples = audioBufferToMonoFloat32(audioBuffer);
+        const sampleRate = audioBuffer.sampleRate;
+        const timeBins = options.timeBins || 256;
+        const freqBins = options.freqBins || 128;
+        const nyquist = Math.max(21, sampleRate / 2);
+        const minFreq = Math.max(20, Math.min(nyquist - 1, options.minFreq || 80));
+        const maxFreq = Math.max(minFreq + 1, Math.min(nyquist, options.maxFreq || 4000));
+        const scale = options.scale || 'linear';
+        const windowSize = Math.min(4096, Math.max(512, 1 << Math.floor(Math.log2(Math.max(512, sampleRate / 20)))));
+        const halfWindow = Math.floor(windowSize / 2);
+        const raw = new Float32Array(timeBins * freqBins);
+        const real = new Float64Array(windowSize);
+        const imag = new Float64Array(windowSize);
+
+        for (let t = 0; t < timeBins; t++) {
+          const center = timeBins <= 1 ? 0 : Math.round((t / (timeBins - 1)) * (samples.length - 1));
+          real.fill(0);
+          imag.fill(0);
+          for (let i = 0; i < windowSize; i++) {
+            const srcIndex = center - halfWindow + i;
+            const sample = srcIndex >= 0 && srcIndex < samples.length ? samples[srcIndex] : 0;
+            const windowGain = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / Math.max(1, windowSize - 1));
+            real[i] = sample * windowGain;
+          }
+
+          fftInPlace(real, imag);
+
+          for (let f = 0; f < freqBins; f++) {
+            const freq = frequencyForBin(f, freqBins, minFreq, maxFreq, scale);
+            const bin = Math.max(0, Math.min(windowSize / 2 - 1, freq * windowSize / sampleRate));
+            const b0 = Math.floor(bin);
+            const b1 = Math.min(windowSize / 2 - 1, b0 + 1);
+            const mix = bin - b0;
+            const mag0 = Math.hypot(real[b0], imag[b0]);
+            const mag1 = Math.hypot(real[b1], imag[b1]);
+            raw[f * timeBins + t] = mag0 + (mag1 - mag0) * mix;
+          }
+        }
+
+        const sorted = Array.from(raw).sort((a, b) => a - b);
+        const reference = Math.max(1e-9, percentile(sorted, 0.995));
+        const amplitudes = new Float32Array(raw.length);
+        for (let i = 0; i < raw.length; i++) {
+          amplitudes[i] = clamp01(Math.log1p(raw[i] / reference * 18) / Math.log1p(18));
+        }
+
+        const preview = createSpectrogramPreviewFromAmplitudes(amplitudes, timeBins, freqBins);
+        return {
+          amplitudes,
+          timeBins,
+          freqBins,
+          preview,
+          minFreq,
+          maxFreq,
+          scale,
+          sampleRate,
+          durationSeconds: audioBuffer.duration,
+          source: 'uploaded audio'
+        };
+      }
+
+      function setupSpectrogramControls() {
+        const button = document.getElementById('capture-spectrogram-btn');
+        const uploadButton = document.getElementById('upload-audio-spectrogram-btn');
+        const captureSheetSelect = document.getElementById('capture-sheet-select');
+        if (captureSheetSelect) captureSheetSelect.addEventListener('change', updateSpectrogramCaptureReady);
+
+        if (button) {
+          button.addEventListener('click', () => {
+            const status = document.getElementById('spectrogram-status');
+            const audioEl = document.getElementById('spectrogram-audio');
+            const downloadEl = document.getElementById('spectrogram-download');
+
+            try {
+              const selectedSheet = getSelectedCaptureSheet();
+              const selectedGeometry = selectedSheet ? getFreshSheetGeometry(selectedSheet.id) : null;
+              if (!selectedSheet || !selectedGeometry) {
+                if (status) status.innerText = 'No current projection for the selected sheet. Hold that marker sheet fully in view and try again.';
+                showToast('Selected sheet is not currently detected. Capture aborted.', 'error');
+                return;
+              }
+
+              const frameData = getCurrentVideoFrameImageData();
+              if (!frameData) throw new Error('Could not read a current webcam frame.');
+
+              if (status) status.innerText = `Rectifying ${selectedGeometry.label} spectrogram...`;
+
+              const { minFreq, maxFreq, scale: activeScale } = getSpectrogramFrequencySettings();
+              const directionEl = document.getElementById('spectrogram-frequency-direction');
+              const processingModeEl = document.getElementById('spectrogram-processing-mode');
+              const blackCutoffEl = document.getElementById('spectrogram-black-cutoff');
+              const despeckleEl = document.getElementById('spectrogram-despeckle');
+              const fillGapsEl = document.getElementById('spectrogram-fill-gaps');
+              let blackCutoff = blackCutoffEl ? parseFloat(blackCutoffEl.value) : 0.34;
+              if (!Number.isFinite(blackCutoff)) blackCutoff = 0.34;
+              blackCutoff = Math.max(0.10, Math.min(0.80, blackCutoff));
+              if (blackCutoffEl) blackCutoffEl.value = blackCutoff.toFixed(2);
+
+              const extracted = extractSpectrogramFromPaper(frameData, selectedGeometry, {
+                timeBins: 256,
+                freqBins: 128,
+                direction: directionEl ? directionEl.value : 'left-low',
+                processingMode: processingModeEl ? processingModeEl.value : 'adaptive-bw',
+                blackCutoff,
+                despeckle: despeckleEl ? despeckleEl.checked : true,
+                fillGaps: fillGapsEl ? fillGapsEl.checked : true
+              });
+              renderSpectrogramPreview(extracted.preview);
+
+              if (status) status.innerText = 'Synthesizing one-second audio from spectrogram...';
+              const smoothed = smoothSpectrogramAmplitudes(extracted.amplitudes, extracted.timeBins, extracted.freqBins);
+              const spectrogramData = {
+                amplitudes: smoothed,
+                timeBins: extracted.timeBins,
+                freqBins: extracted.freqBins,
+                minFreq,
+                maxFreq,
+                scale: activeScale,
+                durationSeconds: 1,
+                createdAt: performance.now()
+              };
+              setSheetSpectrogramState(selectedGeometry.sheetId, spectrogramData, { source: 'captured sheet image' });
+
+              const audio = synthesizeAudioFromSpectrogram(smoothed, extracted.timeBins, extracted.freqBins, {
+                sampleRate: 44100,
+                durationSeconds: 1,
+                minFreq,
+                maxFreq,
+                scale: activeScale
+              });
+
+              const wavBlob = encodeWav16(audio.samples, audio.sampleRate);
+
+              if (spectrogramAudioURL) URL.revokeObjectURL(spectrogramAudioURL);
+              spectrogramAudioURL = URL.createObjectURL(wavBlob);
+
+              if (audioEl) {
+                audioEl.src = spectrogramAudioURL;
+                audioEl.classList.remove('hidden');
+                audioEl.load();
+              }
+              if (downloadEl) {
+                downloadEl.href = spectrogramAudioURL;
+                downloadEl.download = `${selectedGeometry.label.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}-spectrogram.wav`;
+                downloadEl.classList.remove('hidden');
+              }
+
+              if (status) {
+                status.innerText = `Audio ready for ${selectedGeometry.label}: 1.0 s WAV, ${Math.round(minFreq)}-${Math.round(maxFreq)} Hz. Cutoff=${extracted.threshold.toFixed(2)}.`;
+              }
+              setFingerPlaybackStatus(`Finger playback ready for ${selectedGeometry.label}: place index fingertip over its yellow spectrogram area.`, 'waiting');
+              showToast('Spectrogram audio file created and mapped to selected sheet.', 'info');
+            } catch (err) {
+              console.error('Spectrogram capture failed:', err);
+              if (status) status.innerText = `Capture failed: ${err.message}`;
+              showToast('Spectrogram capture failed. Check the console for details.', 'error');
+            }
+          });
+        }
+
+        if (uploadButton) {
+          uploadButton.addEventListener('click', async () => {
+            const status = document.getElementById('uploaded-audio-status');
+            const fileInput = document.getElementById('uploaded-audio-file');
+            const selectedSheet = getSelectedUploadSheet();
+            const file = fileInput && fileInput.files && fileInput.files.length ? fileInput.files[0] : null;
+
+            try {
+              if (!selectedSheet) throw new Error('No predefined sheet is selected.');
+              if (!file) throw new Error('Select an audio file first.');
+              if (!audioCtx) initSynth();
+              if (!audioCtx) throw new Error('The Web Audio API is not available in this browser.');
+              if (status) status.innerText = `Decoding ${file.name}...`;
+
+              const arrayBuffer = await file.arrayBuffer();
+              const decoded = await audioCtx.decodeAudioData(arrayBuffer.slice(0));
+              if (status) status.innerText = `Transforming ${file.name} into a spectrogram...`;
+
+              const { minFreq, maxFreq, scale } = getSpectrogramFrequencySettings();
+              const transformed = transformAudioBufferToSpectrogram(decoded, {
+                timeBins: 256,
+                freqBins: 128,
+                minFreq,
+                maxFreq,
+                scale
+              });
+
+              renderSpectrogramPreview(transformed.preview);
+              setSheetSpectrogramState(selectedSheet.id, transformed, {
+                source: 'uploaded audio',
+                fileName: file.name
+              });
+
+              if (status) {
+                status.innerText = `Mapped uploaded audio to ${selectedSheet.label || selectedSheet.id}: ${file.name}, ${transformed.durationSeconds.toFixed(2)} s, ${Math.round(transformed.minFreq)}-${Math.round(transformed.maxFreq)} Hz.`;
+              }
+              setFingerPlaybackStatus(`Finger playback ready for ${selectedSheet.label || selectedSheet.id}: place index fingertip over that sheet.`, 'waiting');
+              showToast('Uploaded audio transformed to a spectrogram and mapped to the selected sheet.', 'info');
+            } catch (err) {
+              console.error('Uploaded audio spectrogram failed:', err);
+              if (status) status.innerText = `Upload failed: ${err.message}`;
+              showToast('Uploaded audio could not be transformed. Check the selected file.', 'error');
+            }
+          });
+        }
+      }
+
+      // ---------------------------------------------------------------------
+      // OpenCV DICT_5X5_50 marker detector
+      // ---------------------------------------------------------------------
+      // The browser js-aruco2 package does not ship OpenCV DICT_5X5_50 as a
+      // built-in dictionary, so this lightweight detector finds square dark
+      // components and decodes the 50 known 5x5 marker payloads. Sheet tracking
+      // then filters to the marker IDs named in DEFINED_SHEETS.
+      const PRINTED_PAPER_DICTIONARY = 'PAPER_5X5_IDS_1_4';
+      const PRINTED_PAPER_PATTERNS = {
+              "0": "0101110100100110101000011",
+              "1": "1111000111111100100011001",
+              "2": "0010100001111000100100010",
+              "3": "0111111000110101000001000",
+              "4": "0010100010100101011011011",
+              "5": "0001010111111011111010010",
+              "6": "1001011000010100000010011",
+              "7": "1000111011110101110010100",
+              "8": "0111100101001111011001101",
+              "9": "0110011101100000001011010",
+              "10": "0110000110001000111111100",
+              "11": "0010111010010010100111111",
+              "12": "0000110011101010011101110",
+              "13": "1101000011000111010011001",
+              "14": "0000000110000001101010111",
+              "15": "1101011100001110010000000",
+              "16": "1011010000101100010100111",
+              "17": "1010000010101110110010000",
+              "18": "1000010011011001000111011",
+              "19": "0111110011110001000010111",
+              "20": "0110100100010010110001010",
+              "21": "0101011110001101110111111",
+              "22": "0100101001111001101011110",
+              "23": "1010001011110110100100001",
+              "24": "0011000110010111111011100",
+              "25": "0010110100110011010001101",
+              "26": "0001111000011000101110100",
+              "27": "1110111011011110110111001",
+              "28": "1110001000110100110001101",
+              "29": "1110110111101110111000100",
+              "30": "1110110001100100010010001",
+              "31": "1110010010111011110001100",
+              "32": "1101111110010111100110001",
+              "33": "1101101010101010100110111",
+              "34": "1101110011011110001000101",
+              "35": "1100001011001000000010101",
+              "36": "1011001100111010101010011",
+              "37": "1011111010010111011111110",
+              "38": "1011001010101001011100010",
+              "39": "1011110011100001110001101",
+              "40": "1010100101101011111011010",
+              "41": "1010110101101000001100001",
+              "42": "1001001111011011000001000",
+              "43": "1001111001111011000100110",
+              "44": "1001001011000000111001110",
+              "45": "1000101101001110110000101",
+              "46": "1000101100100011001101000",
+              "47": "1000001101011011111111001",
+              "48": "1000010100110111011011010",
+              "49": "1000010010100100000101000"
+      };
+
+      function getActiveSheetMarkerIds() {
+        return getConfiguredSheetMarkerIdSet();
+      }
+
+      function markerBitsToMatrix(bitString) {
+        const m = [];
+        for (let y = 0; y < 5; y++) {
+          const row = [];
+          for (let x = 0; x < 5; x++) row.push(bitString[y * 5 + x] === '1' ? 1 : 0);
+          m.push(row);
+        }
+        return m;
+      }
+
+      function rotateMatrixClockwise(matrix) {
+        const n = matrix.length;
+        const out = Array.from({ length: n }, () => Array(n).fill(0));
+        for (let y = 0; y < n; y++) {
+          for (let x = 0; x < n; x++) out[x][n - y - 1] = matrix[y][x];
+        }
+        return out;
+      }
+
+      function flipMatrixHorizontal(matrix) {
+        return matrix.map(row => row.slice().reverse());
+      }
+
+      function matrixToBitString(matrix) {
+        let s = '';
+        for (let y = 0; y < matrix.length; y++) {
+          for (let x = 0; x < matrix[y].length; x++) s += matrix[y][x] ? '1' : '0';
+        }
+        return s;
+      }
+
+      const PRINTED_PAPER_VARIANTS = (() => {
+        const variants = [];
+        for (const idText of Object.keys(PRINTED_PAPER_PATTERNS)) {
+          const id = parseInt(idText, 10);
+          const base = markerBitsToMatrix(PRINTED_PAPER_PATTERNS[id]);
+          for (const mirrored of [false, true]) {
+            let m = mirrored ? flipMatrixHorizontal(base) : base.map(row => row.slice());
+            for (let rotation = 0; rotation < 4; rotation++) {
+              variants.push({ id, mirrored, rotation, bits: matrixToBitString(m) });
+              m = rotateMatrixClockwise(m);
+            }
+          }
+        }
+        return variants;
+      })();
+
+      function hammingDistance(a, b) {
+        let d = 0;
+        for (let i = 0; i < a.length; i++) if (a[i] !== b[i]) d++;
+        return d;
+      }
+
+      function findBestPrintedPaperMarker(innerBits) {
+        let best = null;
+        for (const variant of PRINTED_PAPER_VARIANTS) {
+          const distance = hammingDistance(innerBits, variant.bits);
+          if (!best || distance < best.distance) best = { ...variant, distance };
+        }
+        return best;
+      }
+
+      function unitSquareToQuadMapper(corners) {
+        const [p0, p1, p2, p3] = corners;
+        const dx1 = p1.x - p2.x;
+        const dy1 = p1.y - p2.y;
+        const dx2 = p3.x - p2.x;
+        const dy2 = p3.y - p2.y;
+        const dx3 = p0.x - p1.x + p2.x - p3.x;
+        const dy3 = p0.y - p1.y + p2.y - p3.y;
+        let a, b, c, d, e, f, g, h;
+
+        if (Math.abs(dx3) < 1e-9 && Math.abs(dy3) < 1e-9) {
+          a = p1.x - p0.x; b = p3.x - p0.x; c = p0.x;
+          d = p1.y - p0.y; e = p3.y - p0.y; f = p0.y;
+          g = 0; h = 0;
+        } else {
+          const det = dx1 * dy2 - dx2 * dy1;
+          if (Math.abs(det) < 1e-9) return null;
+          g = (dx3 * dy2 - dx2 * dy3) / det;
+          h = (dx1 * dy3 - dx3 * dy1) / det;
+          a = p1.x - p0.x + g * p1.x;
+          b = p3.x - p0.x + h * p3.x;
+          c = p0.x;
+          d = p1.y - p0.y + g * p1.y;
+          e = p3.y - p0.y + h * p3.y;
+          f = p0.y;
+        }
+
+        return (u, v) => {
+          const denom = g * u + h * v + 1;
+          return {
+            x: (a * u + b * v + c) / denom,
+            y: (d * u + e * v + f) / denom
+          };
+        };
+      }
+
+      function sampleGrayFromImageData(imageData, x, y) {
+        const w = imageData.width;
+        const h = imageData.height;
+        const data = imageData.data;
+        const ix = Math.max(0, Math.min(w - 1, Math.round(x)));
+        const iy = Math.max(0, Math.min(h - 1, Math.round(y)));
+        const p = (iy * w + ix) * 4;
+        return 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+      }
+
+      function decodePrintedPaperCandidate(imageData, corners) {
+        const mapPoint = unitSquareToQuadMapper(corners);
+        if (!mapPoint) return null;
+
+        const values = [];
+        const cellOffsets = [
+          [0.50, 0.50],
+          [0.40, 0.40],
+          [0.60, 0.40],
+          [0.40, 0.60],
+          [0.60, 0.60]
+        ];
+
+        for (let r = 0; r < 7; r++) {
+          values[r] = [];
+          for (let c = 0; c < 7; c++) {
+            let total = 0;
+            for (const [ox, oy] of cellOffsets) {
+              const p = mapPoint((c + ox) / 7, (r + oy) / 7);
+              total += sampleGrayFromImageData(imageData, p.x, p.y);
+            }
+            values[r][c] = total / cellOffsets.length;
+          }
+        }
+
+        const flat = values.flat().slice().sort((a, b) => a - b);
+        const darkAvg = flat.slice(0, 10).reduce((a, b) => a + b, 0) / 10;
+        const lightAvg = flat.slice(-10).reduce((a, b) => a + b, 0) / 10;
+        if ((lightAvg - darkAvg) < 35) return null;
+        const threshold = (darkAvg + lightAvg) / 2;
+
+        const black = values.map(row => row.map(v => v < threshold ? 1 : 0));
+
+        let blackBorderCells = 0;
+        let totalBorderCells = 0;
+        for (let r = 0; r < 7; r++) {
+          for (let c = 0; c < 7; c++) {
+            if (r === 0 || r === 6 || c === 0 || c === 6) {
+              totalBorderCells++;
+              if (black[r][c]) blackBorderCells++;
+            }
+          }
+        }
+        if (blackBorderCells < 20) return null;
+
+        let innerBits = '';
+        for (let r = 1; r <= 5; r++) {
+          for (let c = 1; c <= 5; c++) innerBits += black[r][c] ? '1' : '0';
+        }
+
+        const best = findBestPrintedPaperMarker(innerBits);
+        if (!best || best.distance > 3) return null;
+        return best;
+      }
+
+      function detectPrintedPaperMarkers(imageData) {
+        const w = imageData.width;
+        const h = imageData.height;
+        const data = imageData.data;
+        const pixelCount = w * h;
+        const black = new Uint8Array(pixelCount);
+        const visited = new Uint8Array(pixelCount);
+
+        let lumTotal = 0;
+        let sampled = 0;
+        for (let i = 0; i < pixelCount; i += 16) {
+          const p = i * 4;
+          lumTotal += 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+          sampled++;
+        }
+        const avgLum = lumTotal / Math.max(1, sampled);
+        const darkThreshold = Math.max(55, Math.min(110, avgLum - 75));
+
+        for (let i = 0; i < pixelCount; i++) {
+          const p = i * 4;
+          const lum = 0.299 * data[p] + 0.587 * data[p + 1] + 0.114 * data[p + 2];
+          black[i] = lum < darkThreshold ? 1 : 0;
+        }
+
+        const minFrameDim = Math.min(w, h);
+        const minBoxSize = Math.max(18, Math.round(minFrameDim * 0.025));
+        const maxBoxSize = Math.round(minFrameDim * 0.32);
+        const stack = new Int32Array(pixelCount);
+        const decoded = [];
+
+        for (let start = 0; start < pixelCount; start++) {
+          if (!black[start] || visited[start]) continue;
+
+          let top = 0;
+          stack[top++] = start;
+          visited[start] = 1;
+
+          let area = 0;
+          let minX = w, minY = h, maxX = 0, maxY = 0;
+          let minSum = Infinity, maxSum = -Infinity, minDiff = Infinity, maxDiff = -Infinity;
+          let pMinSum = null, pMaxSum = null, pMinDiff = null, pMaxDiff = null;
+
+          while (top > 0) {
+            const idx = stack[--top];
+            const x = idx % w;
+            const y = (idx / w) | 0;
+            area++;
+
+            if (x < minX) minX = x;
+            if (x > maxX) maxX = x;
+            if (y < minY) minY = y;
+            if (y > maxY) maxY = y;
+
+            const sum = x + y;
+            const diff = x - y;
+            if (sum < minSum) { minSum = sum; pMinSum = { x, y }; }
+            if (sum > maxSum) { maxSum = sum; pMaxSum = { x, y }; }
+            if (diff < minDiff) { minDiff = diff; pMinDiff = { x, y }; }
+            if (diff > maxDiff) { maxDiff = diff; pMaxDiff = { x, y }; }
+
+            for (let dy = -1; dy <= 1; dy++) {
+              const ny = y + dy;
+              if (ny < 0 || ny >= h) continue;
+              for (let dx = -1; dx <= 1; dx++) {
+                if (dx === 0 && dy === 0) continue;
+                const nx = x + dx;
+                if (nx < 0 || nx >= w) continue;
+                const nidx = ny * w + nx;
+                if (black[nidx] && !visited[nidx]) {
+                  visited[nidx] = 1;
+                  stack[top++] = nidx;
+                }
+              }
+            }
+          }
+
+          const bw = maxX - minX + 1;
+          const bh = maxY - minY + 1;
+          if (bw < minBoxSize || bh < minBoxSize || bw > maxBoxSize || bh > maxBoxSize) continue;
+          const aspect = bw / bh;
+          if (aspect < 0.55 || aspect > 1.85) continue;
+          const fillRatio = area / Math.max(1, bw * bh);
+          if (fillRatio < 0.24 || fillRatio > 0.88) continue;
+
+          let corners = [pMinSum, pMaxDiff, pMaxSum, pMinDiff]; // TL, TR, BR, BL
+          if (corners.some(p => !p)) {
+            corners = [
+              { x: minX, y: minY },
+              { x: maxX, y: minY },
+              { x: maxX, y: maxY },
+              { x: minX, y: maxY }
+            ];
+          }
+
+          const decodedMarker = decodePrintedPaperCandidate(imageData, corners);
+          if (!decodedMarker || !getActiveSheetMarkerIds().has(decodedMarker.id)) continue;
+
+          const cx = corners.reduce((sum, p) => sum + p.x, 0) / 4;
+          const cy = corners.reduce((sum, p) => sum + p.y, 0) / 4;
+          decoded.push({
+            id: decodedMarker.id,
+            corners,
+            cx,
+            cy,
+            area,
+            width: bw,
+            height: bh,
+            decodeDistance: decodedMarker.distance,
+            mirroredDecode: decodedMarker.mirrored,
+            rotation: decodedMarker.rotation
+          });
+        }
+
+        decoded.sort((a, b) => a.decodeDistance - b.decodeDistance || b.area - a.area);
+        const unique = [];
+        for (const marker of decoded) {
+          const duplicate = unique.some(existing => {
+            const d = Math.hypot(marker.cx - existing.cx, marker.cy - existing.cy);
+            return marker.id === existing.id || d < Math.min(marker.width, marker.height, existing.width, existing.height) * 0.75;
+          });
+          if (!duplicate) unique.push(marker);
+        }
+
+        return unique.sort((a, b) => a.id - b.id);
+      }
+
+      function selectedMarkerDictionaryName() {
+        const el = document.getElementById('marker-dictionary');
+        return el ? el.value : PRINTED_PAPER_DICTIONARY;
+      }
+
+      function configureMarkerDetector(dictName) {
+        if (dictName === PRINTED_PAPER_DICTIONARY) {
+          markerDetector = null;
+          persistentMarkers = {};
+          resetSheetTrackingStates();
+          showToast('OpenCV 5x5 sheet marker detector ready.', 'info');
+          return true;
+        }
+
+        if (typeof AR !== 'undefined') {
+          markerDetector = new AR.Detector({ dictionaryName: dictName });
+          persistentMarkers = {};
+          resetSheetTrackingStates();
+          showToast(`js-aruco2 marker detector ready with ${dictName}.`, 'info');
+          return true;
+        }
+
+        markerDetector = null;
+        persistentMarkers = {};
+        resetSheetTrackingStates();
+        showToast('js-aruco2 did not load. OpenCV 5x5 sheet tracking is still available.', 'error');
+        return false;
+      }
+
+      // MediaPipe Hands Result Event Listener
+      function onHandsResults(results) {
+        // Calculate FPS
+        const now = performance.now();
+        const delay = now - lastProcessedTime;
+        lastProcessedTime = now;
+        frameTimes.push(delay);
+        if (frameTimes.length > 30) frameTimes.shift();
+        const avgFps = Math.round(1000 / (frameTimes.reduce((a, b) => a + b, 0) / frameTimes.length));
+
+        const fpsCounter = document.getElementById('fps-counter');
+        if (fpsCounter) fpsCounter.innerText = `FPS: ${avgFps}`;
+
+        const metricLatency = document.getElementById('metric-latency');
+        if (metricLatency) metricLatency.innerHTML = `${Math.round(delay)} <span class="text-xs text-slate-500 font-normal">ms</span>`;
+
+        // Clear Canvas Frame
+        canvasCtx.save();
+        canvasCtx.clearRect(0, 0, canvasElement.width, canvasElement.height);
+
+        // Draw standard input video frame onto raw canvas background
+        canvasCtx.drawImage(results.image, 0, 0, canvasElement.width, canvasElement.height);
+
+        const numHandsDetected = results.multiHandLandmarks ? results.multiHandLandmarks.length : 0;
+        const metricHands = document.getElementById('metric-hands');
+        if (metricHands) metricHands.innerText = numHandsDetected;
+
+        // -------------------------------------------------------------
+        // FIDUCIAL MARKER (ARUCO) PIPELINE
+        // -------------------------------------------------------------
+        const trackMarkersEl = document.getElementById('track-markers');
+        const isMarkerTrackingEnabled = trackMarkersEl ? trackMarkersEl.checked : true;
+        const markerFpsEl = document.getElementById('marker-fps');
+        const markerFPSLimit = markerFpsEl ? parseInt(markerFpsEl.value) : 1000;
+
+        const dictionaryName = selectedMarkerDictionaryName();
+        const usePrintedPaperDetector = dictionaryName === PRINTED_PAPER_DICTIONARY;
+        const activeSheetMarkerIds = getActiveSheetMarkerIds();
+
+        if (isMarkerTrackingEnabled && (usePrintedPaperDetector || markerDetector)) {
+          if (now - lastMarkerTime >= markerFPSLimit) {
+            lastMarkerTime = now;
+            try {
+              // Keep off-screen tracking canvas synced to main canvas dimensions.
+              // The input frame is intentionally unmirrored for both tracking algorithms.
+              if (cvCanvas.width !== canvasElement.width || cvCanvas.height !== canvasElement.height) {
+                cvCanvas.width = canvasElement.width;
+                cvCanvas.height = canvasElement.height;
+              }
+
+              cvCtx.save();
+              cvCtx.setTransform(1, 0, 0, 1, 0, 0);
+              cvCtx.clearRect(0, 0, cvCanvas.width, cvCanvas.height);
+              cvCtx.drawImage(results.image, 0, 0, cvCanvas.width, cvCanvas.height);
+              cvCtx.restore();
+
+              const frameData = cvCtx.getImageData(0, 0, cvCanvas.width, cvCanvas.height);
+              const rawDetections = usePrintedPaperDetector
+                ? detectPrintedPaperMarkers(frameData)
+                : markerDetector.detect(frameData);
+
+              for (const marker of rawDetections) {
+                if (!activeSheetMarkerIds.has(marker.id)) continue;
+
+                const alignedCorners = marker.corners.map(c => ({ x: c.x, y: c.y }));
+                const cx = alignedCorners.reduce((sum, c) => sum + c.x, 0) / alignedCorners.length;
+                const cy = alignedCorners.reduce((sum, c) => sum + c.y, 0) / alignedCorners.length;
+
+                persistentMarkers[marker.id] = {
+                  id: marker.id,
+                  corners: alignedCorners,
+                  cx,
+                  cy,
+                  decodeDistance: marker.decodeDistance,
+                  lastSeen: now
+                };
+              }
+            } catch (markerErr) {
+              console.error('ArUco Tracking execution error:', markerErr);
+            }
+          }
+        }
+
+        // Cleanup expired tracking instances (Hysteresis expiration: 1.2 seconds for extra stability)
+        const hysteresisTimeLimit = 1200;
+        for (const markerId in persistentMarkers) {
+          if (now - persistentMarkers[markerId].lastSeen > hysteresisTimeLimit || !isMarkerTrackingEnabled) {
+            delete persistentMarkers[markerId];
+          }
+        }
+
+        // Reconstruct final renderable ArUco marker array
+        trackedMarkers = Object.values(persistentMarkers);
+
+        const metricMarkers = document.getElementById('metric-markers');
+        if (metricMarkers) metricMarkers.innerText = trackedMarkers.length;
+
+        // Draw tracked markers overlay
+        if (isMarkerTrackingEnabled && trackedMarkers.length > 0) {
+          canvasCtx.save();
+          for (const marker of trackedMarkers) {
+            canvasCtx.strokeStyle = "#10b981";
+            canvasCtx.lineWidth = 3;
+            canvasCtx.lineJoin = "round";
+
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(marker.corners[0].x, marker.corners[0].y);
+            for (let c = 1; c < 4; c++) {
+              canvasCtx.lineTo(marker.corners[c].x, marker.corners[c].y);
+            }
+            canvasCtx.closePath();
+            canvasCtx.stroke();
+
+            const cx = (marker.corners[0].x + marker.corners[1].x + marker.corners[2].x + marker.corners[3].x) / 4;
+            const cy = (marker.corners[0].y + marker.corners[1].y + marker.corners[2].y + marker.corners[3].y) / 4;
+
+            canvasCtx.fillStyle = "#10b981";
+            canvasCtx.beginPath();
+            canvasCtx.arc(cx, cy, 5, 0, 2 * Math.PI);
+            canvasCtx.fill();
+
+            canvasCtx.save();
+            canvasCtx.font = "bold 12px monospace";
+            canvasCtx.textAlign = "center";
+            canvasCtx.strokeStyle = "#020617";
+            canvasCtx.lineWidth = 3;
+            canvasCtx.strokeText(`ID: ${marker.id}`, cx, cy - 14);
+            canvasCtx.fillStyle = "#34d399";
+            canvasCtx.fillText(`ID: ${marker.id}`, cx, cy - 14);
+            canvasCtx.restore();
+          }
+          canvasCtx.restore();
+        }
+
+        // -------------------------------------------------------------
+        // DEFINED SHEET SURFACE RECONSTRUCTION PIPELINE
+        // -------------------------------------------------------------
+        const paperStatusMetric = document.getElementById('metric-paper-status');
+        const detectedSheetGeometries = [];
+
+        if (isMarkerTrackingEnabled) {
+          for (const sheetDef of DEFINED_SHEETS) {
+            const sheetTracking = resolveSheetMarkersWithOcclusion(sheetDef, trackedMarkers, now, markerFPSLimit);
+            const sheetGeometry = sheetTracking ? buildPaperGeometryFromSheetMarkers(sheetDef, sheetTracking.markers) : null;
+
+            if (!sheetGeometry) continue;
+
+            sheetGeometry.trackingMode = sheetTracking.mode;
+            sheetGeometry.missingIds = sheetTracking.missingIds;
+            sheetGeometry.lastSeen = now;
+            latestDetectedSheetGeometries.set(sheetGeometry.sheetId, sheetGeometry);
+            detectedSheetGeometries.push(sheetGeometry);
+
+            const usingOcclusionHold = sheetTracking.mode === 'occlusion-hold';
+            const paperCorners = sheetGeometry.outerQuad;
+            const contentCorners = sheetGeometry.contentQuad;
+
+            canvasCtx.save();
+            canvasCtx.fillStyle = usingOcclusionHold ? "rgba(251, 191, 36, 0.18)" : "rgba(14, 165, 233, 0.22)";
+            canvasCtx.beginPath();
+            canvasCtx.moveTo(paperCorners[0].x, paperCorners[0].y);
+            canvasCtx.lineTo(paperCorners[1].x, paperCorners[1].y);
+            canvasCtx.lineTo(paperCorners[2].x, paperCorners[2].y);
+            canvasCtx.lineTo(paperCorners[3].x, paperCorners[3].y);
+            canvasCtx.closePath();
+            canvasCtx.fill();
+            canvasCtx.strokeStyle = usingOcclusionHold ? "#f59e0b" : "#38bdf8";
+            canvasCtx.lineWidth = 4;
+            canvasCtx.setLineDash(usingOcclusionHold ? [12, 5] : [8, 4]);
+            canvasCtx.stroke();
+            canvasCtx.restore();
+
+            // The inner rectangle is the region captured or mapped as the audio spectrogram.
+            drawQuad(canvasCtx, contentCorners, "#facc15", 2.5, [5, 3]);
+
+            canvasCtx.save();
+            canvasCtx.font = "bold 14px monospace";
+            canvasCtx.textAlign = "center";
+            canvasCtx.strokeStyle = "#020617";
+            canvasCtx.lineWidth = 4;
+            const surfaceLabel = `${sheetGeometry.label}${usingOcclusionHold ? ' (held)' : ''}`;
+            canvasCtx.strokeText(surfaceLabel, sheetGeometry.center.x, sheetGeometry.center.y);
+            canvasCtx.fillStyle = usingOcclusionHold ? "#fbbf24" : "#38bdf8";
+            canvasCtx.fillText(surfaceLabel, sheetGeometry.center.x, sheetGeometry.center.y);
+            canvasCtx.font = "bold 11px monospace";
+            const audioMapped = sheetAudioStates.has(sheetGeometry.sheetId) ? "AUDIO MAPPED" : "YELLOW AREA = AUDIO MAP";
+            canvasCtx.strokeText(audioMapped, sheetGeometry.center.x, sheetGeometry.center.y + 18);
+            canvasCtx.fillStyle = "#facc15";
+            canvasCtx.fillText(audioMapped, sheetGeometry.center.x, sheetGeometry.center.y + 18);
+            if (usingOcclusionHold) {
+              const heldText = `HELD MARKER IDs: ${sheetTracking.missingIds.join(', ')}`;
+              canvasCtx.strokeText(heldText, sheetGeometry.center.x, sheetGeometry.center.y + 34);
+              canvasCtx.fillStyle = "#fbbf24";
+              canvasCtx.fillText(heldText, sheetGeometry.center.x, sheetGeometry.center.y + 34);
+            }
+            canvasCtx.restore();
+          }
+        }
+
+        for (const [sheetId, geometry] of Array.from(latestDetectedSheetGeometries.entries())) {
+          if (now - geometry.lastSeen > 1800 || !isMarkerTrackingEnabled) latestDetectedSheetGeometries.delete(sheetId);
+        }
+
+        updateSpectrogramCaptureReady();
+
+        if (paperStatusMetric) {
+          if (detectedSheetGeometries.length > 0) {
+            const heldCount = detectedSheetGeometries.filter(sheet => sheet.trackingMode === 'occlusion-hold').length;
+            paperStatusMetric.innerText = heldCount > 0
+              ? `${detectedSheetGeometries.length} sheet(s), ${heldCount} held`
+              : `${detectedSheetGeometries.length} sheet(s)`;
+            paperStatusMetric.className = heldCount > 0
+              ? "text-md font-bold font-mono text-amber-300 truncate animate-pulse"
+              : "text-md font-bold font-mono text-emerald-400 truncate animate-pulse";
+          } else {
+            paperStatusMetric.innerText = "Not Found";
+            paperStatusMetric.className = "text-md font-bold font-mono text-rose-400 truncate";
+          }
+        }
+
+        // Handle default fallback structures if both datasets are empty
+        if (numHandsDetected === 0 && trackedMarkers.length === 0) {
+          const metricHandedness = document.getElementById('metric-handedness');
+          if (metricHandedness) metricHandedness.innerText = "-";
+
+          const telemetryLog = document.getElementById('telemetry-log');
+          if (telemetryLog) telemetryLog.innerHTML = `<span class="text-slate-500 italic">Bring your hand or the four-corner ArUco sheet in front of the camera...</span>`;
+
+          updateFingerSpectrogramPlayback(null, null);
+          canvasCtx.restore();
+          return;
+        }
+
+        // Read rendering configuration for Hand Tracking
+        const renderSkeletonEl = document.getElementById('render-skeleton');
+        const renderSkeleton = renderSkeletonEl ? renderSkeletonEl.checked : true;
+        const renderNodesEl = document.getElementById('render-landmarks');
+        const renderNodes = renderNodesEl ? renderNodesEl.checked : true;
+        const renderHighlightTipsEl = document.getElementById('render-finger-tips');
+        const renderHighlightTips = renderHighlightTipsEl ? renderHighlightTipsEl.checked : true;
+        const customSkelColor = "#4f46e5";
+        const customNodeColor = "#a855f7";
+
+        let telemetryLogs = [];
+        let handednessArray = [];
+        let indexTipCanvasPoint = null;
+
+        // Render Detected Hand Overlays
+        for (let index = 0; index < numHandsDetected; index++) {
+          const landmarks = results.multiHandLandmarks[index];
+          const handedness = results.multiHandedness[index];
+          const assignedLabel = handedness ? handedness.label : "Unknown";
+          handednessArray.push(`${assignedLabel} (${Math.round(handedness.score * 100)}%)`);
+
+          // Use the first detected hand's index fingertip for spectrogram scrubbing.
+          if (index === 0 && landmarks[8]) {
+            indexTipCanvasPoint = {
+              x: landmarks[8].x * canvasElement.width,
+              y: landmarks[8].y * canvasElement.height
+            };
+          }
+
+          // Draw Skeleton Lines if enabled
+          if (renderSkeleton) {
+            customDrawSkeleton(canvasCtx, landmarks, HAND_CONNECTIONS, customSkelColor);
+          }
+
+          // Highlight Landmark Coordinates if enabled
+          if (renderNodes) {
+            for (let i = 0; i < landmarks.length; i++) {
+              const point = landmarks[i];
+              const px = point.x * canvasElement.width;
+              const py = point.y * canvasElement.height;
+
+              let radius = 4.5;
+              let drawColor = customNodeColor;
+
+              // Tip Points index markers
+              const isTip = [8].includes(i);
+              if (isTip && renderHighlightTips) {
+                radius = 8;
+                drawColor = "#f59e0b"; // Golden light
+              }
+
+              canvasCtx.beginPath();
+              canvasCtx.arc(px, py, radius, 0, 2 * Math.PI);
+              canvasCtx.fillStyle = drawColor;
+              canvasCtx.fill();
+              canvasCtx.strokeStyle = "#ffffff";
+              canvasCtx.lineWidth = 1.2;
+              canvasCtx.stroke();
+            }
+          }
+
+          // Dynamic Gesture & Status Parsing
+          const tipIndices = [8, 12, 16, 20];
+          const pipIndices = [6, 10, 14, 18];
+          let fingersExtended = 0;
+
+          for (let f = 0; f < 4; f++) {
+            if (landmarks[tipIndices[f]].y < landmarks[pipIndices[f]].y) {
+              fingersExtended++;
+            }
+          }
+          if (Math.abs(landmarks[4].x - landmarks[2].x) > 0.055) {
+            fingersExtended++;
+          }
+
+          let gestureLabel = "Unknown";
+          if (fingersExtended === 5) {
+            gestureLabel = "Open Hand";
+          } else if (fingersExtended === 0) {
+            gestureLabel = "Fist";
+          } else if (fingersExtended === 2 && landmarks[8].y < landmarks[6].y && landmarks[12].y < landmarks[10].y) {
+            gestureLabel = "Peace / Victory";
+          } else if (fingersExtended === 1 && landmarks[8].y < landmarks[6].y) {
+            gestureLabel = "Pointing Index";
+          }
+
+          // Populate Telemetry Log for Hands
+          telemetryLogs.push(`
+            <div class="mb-3 border-b border-slate-800 pb-2">
+              <div class="text-xs font-bold text-slate-300 flex justify-between">
+                <span class="flex items-center gap-1.5 text-purple-400">
+                  <span class="w-2 h-2 rounded-full bg-purple-500"></span>
+                  Hand #${index + 1} (${assignedLabel})
+                </span>
+                <span class="text-purple-300">${gestureLabel}</span>
+              </div>
+              <div class="text-[10px] text-slate-500 mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5">
+                <span>Wrist: [${landmarks[0].x.toFixed(2)}, ${landmarks[0].y.toFixed(2)}]</span>
+                <span>Thumb: [${landmarks[4].x.toFixed(2)}, ${landmarks[4].y.toFixed(2)}]</span>
+                <span>Index: [${landmarks[8].x.toFixed(2)}, ${landmarks[8].y.toFixed(2)}]</span>
+                <span>Middle: [${landmarks[12].x.toFixed(2)}, ${landmarks[12].y.toFixed(2)}]</span>
+                <span>Ring: [${landmarks[16].x.toFixed(2)}, ${landmarks[16].y.toFixed(2)}]</span>
+                <span>Pinky: [${landmarks[20].x.toFixed(2)}, ${landmarks[20].y.toFixed(2)}]</span>
+              </div>
+            </div>
+          `);
+        }
+
+        const fingerPlaybackState = updateFingerSpectrogramPlayback(indexTipCanvasPoint, detectedSheetGeometries);
+        if (fingerPlaybackState && fingerPlaybackState.inside) {
+          drawFingerTimeCursor(canvasCtx, fingerPlaybackState.geometry, fingerPlaybackState, indexTipCanvasPoint);
+        }
+
+        // Populate Telemetry Log for detected sheet surfaces
+        for (const sheetGeometry of detectedSheetGeometries) {
+          const m = sheetGeometry.markerInfos;
+          const mappedState = sheetAudioStates.get(sheetGeometry.sheetId);
+          telemetryLogs.push(`
+            <div class="mb-3 border-b border-cyan-800/50 bg-cyan-950/10 p-2 rounded-lg pb-2">
+              <div class="text-xs font-bold text-cyan-400 flex justify-between">
+                <span class="flex items-center gap-1.5">
+                  <span class="w-2 h-2 rounded-full bg-cyan-400 animate-ping"></span>
+                  ${sheetGeometry.label}
+                </span>
+                <span>${sheetGeometry.trackingMode === 'occlusion-hold' ? 'Occlusion Hold' : 'Active Projection'}</span>
+              </div>
+              <div class="text-[10px] text-slate-400 mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono">
+                <span>Center X: ${Math.round(sheetGeometry.center.x)}px</span>
+                <span>Center Y: ${Math.round(sheetGeometry.center.y)}px</span>
+                <span>Top-left: Marker ${m[0] ? `${m[0].id}${m[0].predicted ? ' held' : ''}` : 'N/A'}</span>
+                <span>Top-right: Marker ${m[1] ? `${m[1].id}${m[1].predicted ? ' held' : ''}` : 'N/A'}</span>
+                <span>Bottom-right: Marker ${m[2] ? `${m[2].id}${m[2].predicted ? ' held' : ''}` : 'N/A'}</span>
+                <span>Bottom-left: Marker ${m[3] ? `${m[3].id}${m[3].predicted ? ' held' : ''}` : 'N/A'}</span>
+                <span>Audio: ${mappedState ? mappedState.source : 'not mapped'}</span>
+                <span>Missing: ${sheetGeometry.missingIds.length ? sheetGeometry.missingIds.join(', ') : '-'}</span>
+              </div>
+            </div>
+          `);
+        }
+
+        // Populate Telemetry Log for Markers
+        if (trackedMarkers.length > 0) {
+          for (let m = 0; m < trackedMarkers.length; m++) {
+            const marker = trackedMarkers[m];
+            const cx = (marker.corners[0].x + marker.corners[1].x + marker.corners[2].x + marker.corners[3].x) / 4;
+            const cy = (marker.corners[0].y + marker.corners[1].y + marker.corners[2].y + marker.corners[3].y) / 4;
+
+            telemetryLogs.push(`
+              <div class="mb-3 border-b border-slate-800 pb-2">
+                <div class="text-xs font-bold text-slate-300 flex justify-between">
+                  <span class="flex items-center gap-1.5 text-emerald-400">
+                    <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    Marker #${m + 1}
+                  </span>
+                  <span class="text-emerald-300">ID: ${marker.id}</span>
+                </div>
+                <div class="text-[10px] text-slate-500 mt-1.5 grid grid-cols-2 gap-x-2 gap-y-0.5 font-mono">
+                  <span>Center X: ${Math.round(cx)}px</span>
+                  <span>Center Y: ${Math.round(cy)}px</span>
+                  <span>Corner 0: [${Math.round(marker.corners[0].x)}, ${Math.round(marker.corners[0].y)}]</span>
+                  <span>Corner 2: [${Math.round(marker.corners[2].x)}, ${Math.round(marker.corners[2].y)}]</span>
+                </div>
+              </div>
+            `);
+          }
+        }
+
+        const metricHandedness = document.getElementById('metric-handedness');
+        if (metricHandedness) {
+          metricHandedness.innerText = handednessArray.join(" | ") || "N/A";
+        }
+
+        const telemetryLog = document.getElementById('telemetry-log');
+        if (telemetryLog) {
+          telemetryLog.innerHTML = telemetryLogs.join("");
+        }
+
+        canvasCtx.restore();
+      }
+
+      // Initialize MediaPipe and Local Marker Detection modules
+      function initMediaPipe() {
+        try {
+          const selectComplexity = document.getElementById('setting-complexity');
+          const selectMaxHands = document.getElementById('setting-max-hands');
+          const selectInputFps = document.getElementById('setting-input-fps');
+          const selectDictionary = document.getElementById('marker-dictionary');
+
+          // Initialize the marker detector. The default path is the custom
+          // detector for OpenCV DICT_5X5_50 sheet marker IDs.
+          configureMarkerDetector(selectDictionary ? selectDictionary.value : PRINTED_PAPER_DICTIONARY);
+
+          // Create Hands Detector Module
+          handsModel = new Hands({
+            locateFile: (file) => {
+              return `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${file}`;
+            }
+          });
+
+          handsModel.setOptions({
+            maxNumHands: selectMaxHands ? (parseInt(selectMaxHands.value) || 2) : 2,
+            modelComplexity: selectComplexity ? (parseInt(selectComplexity.value) || 1) : 1,
+            minDetectionConfidence: 0.55,
+            minTrackingConfidence: 0.55
+          });
+
+          handsModel.onResults(onHandsResults);
+
+          // Reactively update parameters on user change
+          if (selectComplexity) {
+            selectComplexity.addEventListener('change', () => {
+              handsModel.setOptions({ modelComplexity: parseInt(selectComplexity.value) });
+              showToast(`Model complexity shifted to level ${selectComplexity.value}.`, 'info');
+            });
+          }
+
+          if (selectMaxHands) {
+            selectMaxHands.addEventListener('change', () => {
+              let val = Math.max(1, Math.min(4, parseInt(selectMaxHands.value)));
+              selectMaxHands.value = val;
+              handsModel.setOptions({ maxNumHands: val });
+              showToast(`Max target hands altered to ${val}.`, 'info');
+            });
+          }
+
+          if (selectInputFps) {
+            selectInputFps.addEventListener('change', () => {
+              lastFrameSubmitTime = 0;
+              frameTimes = [];
+              lastProcessedTime = performance.now();
+              const fps = parseFloat(selectInputFps.value);
+              const label = Number.isFinite(fps) && fps > 0 ? `${fps} FPS` : 'No cap';
+              showToast(`Tracking input rate set to ${label}.`, 'info');
+            });
+          }
+
+          if (selectDictionary) {
+            selectDictionary.addEventListener('change', () => {
+              const dictName = selectDictionary.value;
+              configureMarkerDetector(dictName);
+            });
+          }
+
+          const splashTitle = document.getElementById('splash-title');
+          if (splashTitle) splashTitle.innerText = "Establishing Video Camera link...";
+
+          const splashDesc = document.getElementById('splash-desc');
+          if (splashDesc) splashDesc.innerText = "Activating camera capturing hardware. Accept any browser permission dialog.";
+
+          startWebcamCapture();
+
+        } catch (err) {
+          console.error("Critical: Model load exception:", err);
+          showToast("Error loading MediaPipe components. Verify network.", "error");
+          const splashTitle = document.getElementById('splash-title');
+          if (splashTitle) splashTitle.innerText = "Load Failure";
+          const splashDesc = document.getElementById('splash-desc');
+          if (splashDesc) splashDesc.innerText = "Webcam or ML runtime modules could not be initialized.";
+        }
+      }
+
+      // Capture User Webcam video stream
+      async function startWebcamCapture() {
+        videoElement = document.getElementById('webcam-source');
+        canvasElement = document.getElementById('output-canvas');
+        canvasCtx = canvasElement.getContext('2d');
+
+        try {
+          const stream = await navigator.mediaDevices.getUserMedia({
+            video: {
+              width: { ideal: 1280 },
+              height: { ideal: 720 },
+              facingMode: "user"
+            },
+            audio: false
+          });
+
+          videoElement.srcObject = stream;
+
+          // Match resolution of elements as soon as camera loads
+          videoElement.onloadedmetadata = () => {
+            canvasElement.width = videoElement.videoWidth;
+            canvasElement.height = videoElement.videoHeight;
+
+            // Clear landing display screen
+            const splashScreen = document.getElementById('splash-screen');
+            if (splashScreen) splashScreen.classList.add('opacity-0', 'pointer-events-none');
+            showToast("Visual intelligence pipeline active!", "success");
+
+            // Start Frame loop processing
+            initCameraFrameLoop();
+          };
+
+        } catch (err) {
+          console.error("Camera connection rejected:", err);
+          showToast("Webcam access rejected. Manual permission validation required.", "error");
+
+          const splashTitle = document.getElementById('splash-title');
+          if (splashTitle) splashTitle.innerText = "Webcam Blocked";
+          const splashDesc = document.getElementById('splash-desc');
+          if (splashDesc) splashDesc.innerText = "The application lacks camera access permissions. Unblock in settings.";
+
+          const retryBtn = document.getElementById('retry-camera-btn');
+          if (retryBtn) {
+            retryBtn.classList.remove('hidden');
+            retryBtn.onclick = () => {
+              retryBtn.classList.add('hidden');
+              startWebcamCapture();
+            };
+          }
+        }
+      }
+
+      function getTrackingInputIntervalMs() {
+        const inputFpsEl = document.getElementById('setting-input-fps');
+        const fps = inputFpsEl ? parseFloat(inputFpsEl.value) : 0;
+        if (!Number.isFinite(fps) || fps <= 0) return 0;
+        return 1000 / fps;
+      }
+
+      // Set up high performance processing loop
+      function initCameraFrameLoop() {
+        cameraInstance = new Camera(videoElement, {
+          onFrame: async () => {
+            if (!handsModel) return;
+
+            const now = performance.now();
+            const minInputInterval = getTrackingInputIntervalMs();
+            if (minInputInterval > 0 && now - lastFrameSubmitTime < minInputInterval) return;
+
+            lastFrameSubmitTime = now;
+            await handsModel.send({ image: videoElement });
+          },
+          width: 1280,
+          height: 720
+        });
+        cameraInstance.start();
+      }
+
+      // Auto load on system DOM ready
+      window.onload = () => {
+        populateDefinedSheetControls();
+        setupSpectrogramControls();
+        updateSpectrogramCaptureReady();
+        initMediaPipe();
+
+        document.body.addEventListener('click', () => {
+          if (audioCtx && audioCtx.state === 'suspended') {
+            audioCtx.resume();
+          }
+        }, { once: true });
+      };
+  </script>
+
+</body>
+</html>
