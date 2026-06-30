@@ -1766,6 +1766,33 @@
         previewCanvas.classList.remove('hidden');
       }
 
+
+      function playAutomaticCaptureAudioAtNormalSpeed(audioEl, statusEl) {
+        if (!audioEl) return;
+        try {
+          audioEl.pause();
+          audioEl.defaultPlaybackRate = 1;
+          audioEl.playbackRate = 1;
+          audioEl.currentTime = 0;
+          audioEl.muted = false;
+
+          const playPromise = audioEl.play();
+          if (playPromise && typeof playPromise.catch === 'function') {
+            playPromise.catch(err => {
+              console.warn('Automatic capture audio playback was blocked or failed:', err);
+              if (statusEl) {
+                statusEl.innerText += ' Automatic playback was blocked by the browser; press play on the audio control.';
+              }
+            });
+          }
+        } catch (err) {
+          console.warn('Automatic capture audio playback failed:', err);
+          if (statusEl) {
+            statusEl.innerText += ' Automatic playback failed; press play on the audio control.';
+          }
+        }
+      }
+
       function getSpectrogramFrequencySettings() {
         const minFreqEl = document.getElementById('spectrogram-min-freq');
         const maxFreqEl = document.getElementById('spectrogram-max-freq');
@@ -2088,6 +2115,11 @@
           if (status) {
             status.innerText = `Audio ready for ${selectedGeometry.label}: 1.0 s WAV, ${Math.round(minFreq)}-${Math.round(maxFreq)} Hz. Cutoff=${extracted.threshold.toFixed(2)}.`;
           }
+
+          if (isAutomatic) {
+            playAutomaticCaptureAudioAtNormalSpeed(audioEl, status);
+          }
+
           setFingerPlaybackStatus(`Finger playback ready for ${selectedGeometry.label}: place index fingertip over its yellow spectrogram area.`, 'waiting');
           if (!isAutomatic) showToast('Spectrogram audio file created and mapped to selected sheet.', 'info');
           return { ok: true, skipped: false, sheetLabel: selectedGeometry.label };
