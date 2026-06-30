@@ -307,10 +307,11 @@
       text-align: left;
     }
 
-      .video-container {
+    .video-container {
       position: relative;
-      overflow: hidden;
-      aspect-ratio: 16/9;
+      width: 100%;
+      overflow: visible;
+      background: #111;
     }
   </style>
 </head>
@@ -696,10 +697,10 @@
           id: 'spectrogram-sheet',
           label: 'Spectrogram Sheet',
           markers: {
-            topLeft: 2,
-            topRight: 4,
-            bottomLeft: 1,
-            bottomRight: 3
+            topLeft: 1,
+            topRight: 2,
+            bottomLeft: 3,
+            bottomRight: 4
           }
         },
         {
@@ -2934,6 +2935,23 @@
         };
       }
 
+      function syncOutputCanvasToVideoFrame() {
+        if (!videoElement || !canvasElement) return false;
+        const videoWidth = videoElement.videoWidth || 0;
+        const videoHeight = videoElement.videoHeight || 0;
+        if (!videoWidth || !videoHeight) return false;
+
+        if (canvasElement.width !== videoWidth || canvasElement.height !== videoHeight) {
+          canvasElement.width = videoWidth;
+          canvasElement.height = videoHeight;
+
+          const videoContainer = canvasElement.closest('.video-container');
+          if (videoContainer) videoContainer.style.aspectRatio = `${videoWidth} / ${videoHeight}`;
+        }
+
+        return true;
+      }
+
       async function attachVideoStream(stream) {
         activeVideoStream = stream;
         videoElement.setAttribute('playsinline', '');
@@ -2957,8 +2975,10 @@
           console.warn('Video play() was not immediately accepted:', err);
         }
 
-        canvasElement.width = videoElement.videoWidth || 1280;
-        canvasElement.height = videoElement.videoHeight || 720;
+        if (!syncOutputCanvasToVideoFrame()) {
+          canvasElement.width = 1280;
+          canvasElement.height = 720;
+        }
       }
 
       function setupCameraSelectionControls() {
@@ -3159,6 +3179,7 @@
           if (loopToken !== cameraFrameLoopToken) return;
 
           if (handsModel && videoElement && videoElement.readyState >= 2 && !isSubmittingFrame) {
+            syncOutputCanvasToVideoFrame();
             const now = performance.now();
             const minInputInterval = getTrackingInputIntervalMs();
             if (minInputInterval <= 0 || now - lastFrameSubmitTime >= minInputInterval) {
