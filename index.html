@@ -174,6 +174,7 @@
     #spectrogram-status,
     #uploaded-audio-status,
     #finger-playback-status,
+    #auto-capture-status,
     #camera-status {
       font-size: 11px;
       margin-top: 6px;
@@ -327,136 +328,7 @@
 
     <div id="main">
       <div id="left-column">
-        <div class="box">
-          <div class="box-title">System Tuning</div>
-          <div class="box-body">
-            <section>
-                <!-- Interactive Options -->
-                <div>
-                    <!-- Options Checkboxes -->
-                    <div>
-                        <div>
-                            <strong>Camera Input</strong>
-
-                            <div>
-                                <label>
-                                    <span>Camera</span>
-                                    <select id="camera-device-select">
-                                        <option value="">Default camera</option>
-                                    </select>
-                                </label>
-                                <div class="control-note">On iPhone, grant camera access first; iOS exposes camera names after permission is granted.</div>
-                                <div id="camera-status">Camera selection will be available after permission is granted.</div>
-                            </div>
-                        </div>
-
-                        <div>
-                            <strong>Hand Tracking</strong>
-
-                            <div>
-                                <label>
-                                    <span>Model Complexity</span>
-                                    <select id="setting-complexity">
-                                        <option value="0">Lite (Speedy)</option>
-                                        <option value="1" selected>Full (Precise)</option>
-                                    </select>
-                                </label>
-                            </div>
-
-                            <div>
-                                <label>
-                                    <span>Max Hands Limit</span>
-                                    <input type="number" id="setting-max-hands" min="1" max="4" value="2">
-                                </label>
-                            </div>
-                        </div>
-
-                        <div>
-                            <strong>Tracking Input Rate</strong>
-
-                            <div>
-                                <label>
-                                    <span>Input FPS Cap</span>
-                                    <select id="setting-input-fps">
-                                        <option value="0" selected>No cap</option>
-                                        <option value="30">30 FPS</option>
-                                        <option value="20">20 FPS</option>
-                                        <option value="15">15 FPS</option>
-                                        <option value="10">10 FPS</option>
-                                        <option value="5">5 FPS</option>
-                                        <option value="2">2 FPS</option>
-                                    </select>
-                                </label>
-                                <div class="control-note">Limits the camera frames submitted to both hand tracking and marker tracking.</div>
-                            </div>
-                        </div>
-
-                        <!-- Overlay Toggle Toggles -->
-                        <div>
-                            <strong>Visualization toggles</strong>
-
-                            <div>
-                                <label>
-                                    <span>Draw Skeleton Bones</span>
-                                    <input type="checkbox" id="render-skeleton" checked>
-                                </label>
-                            </div>
-
-                            <div>
-                                <label>
-                                    <span>Draw Landmark Nodes</span>
-                                    <input type="checkbox" id="render-landmarks" checked >
-                                </label>
-                            </div>
-
-                            <div>
-                                <label>
-                                    <span>Highlight Finger Tips</span>
-                                    <input type="checkbox" id="render-finger-tips" checked>
-                                </label>
-                            </div>
-
-                        </div>
-
-                        <!-- Fiducial Marker (ArUco) Tracking Toggles -->
-                        <div>
-                            <strong>Fiducial Marker (ArUco) Tracking</strong>
-
-                            <div>
-                                <label>
-                                    <span>Enable ArUco Tracking</span>
-                                    <input type="checkbox" id="track-markers" checked>
-                                </label>
-                            </div>
-
-                            <div>
-                                <label>
-                                    <span>Dictionary</span>
-                                    <select id="marker-dictionary">
-                                        <option value="PAPER_5X5_IDS_1_4" selected>Defined sheets: OpenCV 5x5 IDs 0-49</option>
-                                    </select>
-                                </label>
-                            </div>
-
-                            <div>
-                                <label>
-                                    <span>Scan Rate Limit</span>
-                                    <select id="marker-fps">
-                                        <option value="1000" selected>Once per 1 second</option>
-                                        <option value="500">Twice per second</option>
-                                        <option value="200">5 times per second (Recommended)</option>
-                                        <option value="100">Continuous (High CPU)</option>
-                                    </select>
-                                </label>
-                            </div>
-                        </div>
-
-                    </div>
-                </div>
-            </section>
-          </div>
-        </div>
-
+        
         <div class="box">
           <div class="box-title">Paper Spectrogram Audio</div>
           <div class="box-body">
@@ -468,7 +340,7 @@
                             <span id="spectrogram-ready-pill">No paper</span>
                             <p>Captures the detected sheet, rectifies the central area between the four markers, treats black as high amplitude, and synthesizes one second of audio.</p>
                         </div>
-
+                        
                         <div>
                             <strong>Sheet mapping</strong>
 
@@ -519,8 +391,8 @@
                                 <label>
                                     Image Cleanup
                                     <select id="spectrogram-processing-mode">
-                                        <option value="adaptive-bw" selected>Adaptive B&amp;W cleanup</option>
-                                        <option value="edge-assisted">Edge-assisted extraction</option>
+                                        <option value="adaptive-bw">Adaptive B&amp;W cleanup</option>
+                                        <option value="edge-assisted" selected>Edge-assisted extraction</option>
                                         <option value="hard-threshold">Hard global threshold</option>
                                     </select>
                                 </label>
@@ -552,6 +424,20 @@
                             </div>
 
                             <div>
+                                <strong>Automatic capture</strong>
+                                <label>
+                                    <span>Enable automatic capture</span>
+                                    <input type="checkbox" id="auto-capture-enabled">
+                                </label>
+                                <label>
+                                    <span>Capture Interval Seconds</span>
+                                    <input type="number" id="auto-capture-interval" min="1" max="3600" step="1" value="20">
+                                </label>
+                                <div class="control-note">Automatic capture only runs when all four selected-sheet markers are detected and no hand is over the paper.</div>
+                                <div id="auto-capture-status">Automatic capture is off.</div>
+                            </div>
+
+                            <div>
                                 <canvas id="spectrogram-preview" width="256" height="128"></canvas>
                                 <audio id="spectrogram-audio" controls></audio>
                                 <a id="spectrogram-download" download="paper-spectrogram.wav">Download WAV</a>
@@ -575,6 +461,144 @@
 
                             <div id="finger-playback-status">Finger playback: create or upload audio, then place the index fingertip over the yellow spectrogram area.</div>
                         </div>
+                    </div>
+                </div>
+            </section>
+          </div>
+        </div>
+        
+        <div class="box">
+          <div class="box-title">System Tuning</div>
+          <div class="box-body">
+            <section>
+                <!-- Interactive Options -->
+                <div>
+                    <!-- Options Checkboxes -->
+                    <div>
+                        <div>
+                            <strong>Camera Input</strong>
+
+                            <div>
+                                <label>
+                                    <span>Camera</span>
+                                    <select id="camera-device-select">
+                                        <option value="">Default camera</option>
+                                    </select>
+                                </label>
+                                <div class="control-note">On iPhone, grant camera access first; iOS exposes camera names after permission is granted.</div>
+                                <div id="camera-status">Camera selection will be available after permission is granted.</div>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <div>
+                            <strong>Hand Tracking</strong>
+
+                            <div>
+                                <label>
+                                    <span>Model Complexity</span>
+                                    <select id="setting-complexity">
+                                        <option value="0" selected>Lite (Speedy)</option>
+                                        <option value="1">Full (Precise)</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    <span>Max Hands Limit</span>
+                                    <input type="number" id="setting-max-hands" min="1" max="4" value="2">
+                                </label>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <div>
+                            <strong>Tracking Input Rate</strong>
+
+                            <div>
+                                <label>
+                                    <span>Input FPS Cap</span>
+                                    <select id="setting-input-fps">
+                                        <option value="0">No cap</option>
+                                        <option value="30">30 FPS</option>
+                                        <option value="20">20 FPS</option>
+                                        <option value="15" selected>15 FPS</option>
+                                        <option value="10">10 FPS</option>
+                                        <option value="5">5 FPS</option>
+                                        <option value="2">2 FPS</option>
+                                    </select>
+                                </label>
+                                <div class="control-note">Limits the camera frames submitted to both hand tracking and marker tracking.</div>
+                            </div>
+                        </div>
+
+                        <hr>
+
+                        <!-- Overlay Toggle Toggles -->
+                        <div>
+                            <strong>Visualization toggles</strong>
+
+                            <div>
+                                <label>
+                                    <span>Draw Skeleton Bones</span>
+                                    <input type="checkbox" id="render-skeleton" checked>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    <span>Draw Landmark Nodes</span>
+                                    <input type="checkbox" id="render-landmarks" checked >
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    <span>Highlight Finger Tips</span>
+                                    <input type="checkbox" id="render-finger-tips" checked>
+                                </label>
+                            </div>
+
+                        </div>
+
+                        <hr>
+
+                        <!-- Fiducial Marker (ArUco) Tracking Toggles -->
+                        <div>
+                            <strong>Fiducial Marker (ArUco) Tracking</strong>
+
+                            <div>
+                                <label>
+                                    <span>Enable ArUco Tracking</span>
+                                    <input type="checkbox" id="track-markers" checked>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    <span>Dictionary</span>
+                                    <select id="marker-dictionary">
+                                        <option value="PAPER_5X5_IDS_1_4" selected>Defined sheets: OpenCV 5x5 IDs 0-49</option>
+                                    </select>
+                                </label>
+                            </div>
+
+                            <div>
+                                <label>
+                                    <span>Scan Rate Limit</span>
+                                    <select id="marker-fps">
+                                        <option value="1000" selected>Once per 1 second</option>
+                                        <option value="500">Twice per second</option>
+                                        <option value="200">5 times per second (Recommended)</option>
+                                        <option value="100">Continuous (High CPU)</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
+
                     </div>
                 </div>
             </section>
@@ -673,6 +697,10 @@
       let lastProcessedTime = performance.now();
       let lastFrameSubmitTime = 0;
       let frameTimes = [];
+      let latestHandCanvasLandmarks = [];
+      let latestHandLandmarkTime = 0;
+      let autoCaptureTimer = null;
+      let isAutoCaptureAttemptInProgress = false;
 
       // ArUco Tracking State Variables
       let markerDetector = null;
@@ -1891,104 +1919,257 @@
         };
       }
 
+      function getSpectrogramImageSettings() {
+        const directionEl = document.getElementById('spectrogram-frequency-direction');
+        const processingModeEl = document.getElementById('spectrogram-processing-mode');
+        const blackCutoffEl = document.getElementById('spectrogram-black-cutoff');
+        const despeckleEl = document.getElementById('spectrogram-despeckle');
+        const fillGapsEl = document.getElementById('spectrogram-fill-gaps');
+        let blackCutoff = blackCutoffEl ? parseFloat(blackCutoffEl.value) : 0.34;
+        if (!Number.isFinite(blackCutoff)) blackCutoff = 0.34;
+        blackCutoff = Math.max(0.10, Math.min(0.80, blackCutoff));
+        if (blackCutoffEl) blackCutoffEl.value = blackCutoff.toFixed(2);
+
+        return {
+          direction: directionEl ? directionEl.value : 'left-low',
+          processingMode: processingModeEl ? processingModeEl.value : 'adaptive-bw',
+          blackCutoff,
+          despeckle: despeckleEl ? despeckleEl.checked : true,
+          fillGaps: fillGapsEl ? fillGapsEl.checked : true
+        };
+      }
+
+      function getFreshMarkerDetectionReport(sheetDef) {
+        const markerFpsEl = document.getElementById('marker-fps');
+        const markerFPSLimit = markerFpsEl ? parseInt(markerFpsEl.value) : 1000;
+        const freshnessLimit = Math.max(250, markerFPSLimit + 140);
+        const now = performance.now();
+        const requiredIds = getSheetMarkerIds(sheetDef);
+        const missingIds = [];
+        const freshMarkers = [];
+
+        for (const markerId of requiredIds) {
+          const marker = persistentMarkers[markerId];
+          if (!marker || now - marker.lastSeen > freshnessLimit) {
+            missingIds.push(markerId);
+          } else {
+            freshMarkers.push(marker);
+          }
+        }
+
+        return {
+          allDetected: missingIds.length === 0,
+          missingIds,
+          freshMarkers,
+          freshnessLimit
+        };
+      }
+
+      function getFreshHandCanvasLandmarks() {
+        const handAgeLimit = Math.max(750, getTrackingInputIntervalMs() + 350);
+        if (!latestHandLandmarkTime || performance.now() - latestHandLandmarkTime > handAgeLimit) return [];
+        return latestHandCanvasLandmarks;
+      }
+
+      function isHandOccludingSheetGeometry(sheetGeometry) {
+        if (!sheetGeometry || !sheetGeometry.outerQuad) return false;
+        const freshHands = getFreshHandCanvasLandmarks();
+        for (const hand of freshHands) {
+          for (const point of hand) {
+            if (pointToUnitSquare(point, sheetGeometry.outerQuad)) return true;
+          }
+        }
+        return false;
+      }
+
+      function setAutoCaptureStatus(message) {
+        const status = document.getElementById('auto-capture-status');
+        if (status) status.innerText = message;
+      }
+
+      function getAutoCaptureIntervalMs() {
+        const intervalEl = document.getElementById('auto-capture-interval');
+        let seconds = intervalEl ? parseFloat(intervalEl.value) : 10;
+        if (!Number.isFinite(seconds)) seconds = 10;
+        seconds = Math.max(1, Math.min(3600, seconds));
+        if (intervalEl) intervalEl.value = String(seconds);
+        return seconds * 1000;
+      }
+
+      function runSelectedSheetSpectrogramCapture(options = {}) {
+        const trigger = options.trigger || 'manual';
+        const isAutomatic = trigger === 'auto';
+        const status = document.getElementById('spectrogram-status');
+        const audioEl = document.getElementById('spectrogram-audio');
+        const downloadEl = document.getElementById('spectrogram-download');
+
+        try {
+          const selectedSheet = getSelectedCaptureSheet();
+          const selectedGeometry = selectedSheet ? getFreshSheetGeometry(selectedSheet.id) : null;
+          if (!selectedSheet || !selectedGeometry) {
+            const message = 'No current projection for the selected sheet. Hold that marker sheet fully in view and try again.';
+            if (!isAutomatic && status) status.innerText = message;
+            if (!isAutomatic) showToast('Selected sheet is not currently detected. Capture aborted.', 'error');
+            return { ok: false, skipped: true, reason: message };
+          }
+
+          if (options.requireFullMarkers) {
+            const markerReport = getFreshMarkerDetectionReport(selectedSheet);
+            const isFullSheetTracking = selectedGeometry.trackingMode === 'full' && (!selectedGeometry.missingIds || selectedGeometry.missingIds.length === 0);
+            if (!markerReport.allDetected || !isFullSheetTracking) {
+              const missingText = markerReport.missingIds.length ? markerReport.missingIds.join(', ') : 'held/predicted';
+              const message = `Automatic capture skipped: all four selected-sheet ArUco markers must be directly detected. Missing: ${missingText}.`;
+              return { ok: false, skipped: true, reason: message };
+            }
+          }
+
+          if (options.skipIfHandOccluding && isHandOccludingSheetGeometry(selectedGeometry)) {
+            const message = 'Automatic capture skipped: a detected hand is over the selected paper.';
+            return { ok: false, skipped: true, reason: message };
+          }
+
+          const frameData = getCurrentVideoFrameImageData();
+          if (!frameData) throw new Error('Could not read a current webcam frame.');
+
+          if (status) {
+            status.innerText = isAutomatic
+              ? `Automatic capture: rectifying ${selectedGeometry.label} spectrogram...`
+              : `Rectifying ${selectedGeometry.label} spectrogram...`;
+          }
+
+          const { minFreq, maxFreq, scale: activeScale } = getSpectrogramFrequencySettings();
+          const imageSettings = getSpectrogramImageSettings();
+
+          const extracted = extractSpectrogramFromPaper(frameData, selectedGeometry, {
+            timeBins: 256,
+            freqBins: 128,
+            ...imageSettings
+          });
+          renderSpectrogramPreview(extracted.preview);
+
+          if (status) status.innerText = 'Synthesizing one-second audio from spectrogram...';
+          const smoothed = smoothSpectrogramAmplitudes(extracted.amplitudes, extracted.timeBins, extracted.freqBins);
+          const spectrogramData = {
+            amplitudes: smoothed,
+            timeBins: extracted.timeBins,
+            freqBins: extracted.freqBins,
+            minFreq,
+            maxFreq,
+            scale: activeScale,
+            durationSeconds: 1,
+            createdAt: performance.now()
+          };
+          setSheetSpectrogramState(selectedGeometry.sheetId, spectrogramData, { source: 'captured sheet image' });
+
+          const audio = synthesizeAudioFromSpectrogram(smoothed, extracted.timeBins, extracted.freqBins, {
+            sampleRate: 44100,
+            durationSeconds: 1,
+            minFreq,
+            maxFreq,
+            scale: activeScale
+          });
+
+          const wavBlob = encodeWav16(audio.samples, audio.sampleRate);
+
+          if (spectrogramAudioURL) URL.revokeObjectURL(spectrogramAudioURL);
+          spectrogramAudioURL = URL.createObjectURL(wavBlob);
+
+          if (audioEl) {
+            audioEl.src = spectrogramAudioURL;
+            audioEl.classList.remove('hidden');
+            audioEl.load();
+          }
+          if (downloadEl) {
+            downloadEl.href = spectrogramAudioURL;
+            downloadEl.download = `${selectedGeometry.label.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}-spectrogram.wav`;
+            downloadEl.classList.remove('hidden');
+          }
+
+          if (status) {
+            status.innerText = `Audio ready for ${selectedGeometry.label}: 1.0 s WAV, ${Math.round(minFreq)}-${Math.round(maxFreq)} Hz. Cutoff=${extracted.threshold.toFixed(2)}.`;
+          }
+          setFingerPlaybackStatus(`Finger playback ready for ${selectedGeometry.label}: place index fingertip over its yellow spectrogram area.`, 'waiting');
+          if (!isAutomatic) showToast('Spectrogram audio file created and mapped to selected sheet.', 'info');
+          return { ok: true, skipped: false, sheetLabel: selectedGeometry.label };
+        } catch (err) {
+          console.error('Spectrogram capture failed:', err);
+          if (status) status.innerText = `Capture failed: ${err.message}`;
+          if (!isAutomatic) showToast('Spectrogram capture failed. Check the console for details.', 'error');
+          return { ok: false, skipped: false, reason: err.message, error: err };
+        }
+      }
+
+      function stopAutomaticSpectrogramCapture() {
+        if (autoCaptureTimer) {
+          clearInterval(autoCaptureTimer);
+          autoCaptureTimer = null;
+        }
+        isAutoCaptureAttemptInProgress = false;
+      }
+
+      function attemptAutomaticSpectrogramCapture() {
+        if (isAutoCaptureAttemptInProgress) return;
+        isAutoCaptureAttemptInProgress = true;
+        try {
+          const result = runSelectedSheetSpectrogramCapture({
+            trigger: 'auto',
+            requireFullMarkers: true,
+            skipIfHandOccluding: true
+          });
+          const intervalSeconds = Math.round(getAutoCaptureIntervalMs() / 1000);
+          const time = new Date().toLocaleTimeString();
+          if (result.ok) {
+            setAutoCaptureStatus(`Automatic capture succeeded at ${time}. Next attempt in ${intervalSeconds} s.`);
+          } else {
+            setAutoCaptureStatus(`${result.reason || 'Automatic capture skipped.'} Next attempt in ${intervalSeconds} s.`);
+          }
+        } finally {
+          isAutoCaptureAttemptInProgress = false;
+        }
+      }
+
+      function restartAutomaticSpectrogramCaptureTimer() {
+        stopAutomaticSpectrogramCapture();
+        const enabledEl = document.getElementById('auto-capture-enabled');
+        const intervalEl = document.getElementById('auto-capture-interval');
+        const enabled = enabledEl ? enabledEl.checked : false;
+        if (intervalEl) intervalEl.disabled = !enabled;
+
+        if (!enabled) {
+          setAutoCaptureStatus('Automatic capture is off.');
+          return;
+        }
+
+        const intervalMs = getAutoCaptureIntervalMs();
+        autoCaptureTimer = setInterval(attemptAutomaticSpectrogramCapture, intervalMs);
+        setAutoCaptureStatus(`Automatic capture is on. Next attempt in ${Math.round(intervalMs / 1000)} s.`);
+      }
+
       function setupSpectrogramControls() {
         const button = document.getElementById('capture-spectrogram-btn');
         const uploadButton = document.getElementById('upload-audio-spectrogram-btn');
         const captureSheetSelect = document.getElementById('capture-sheet-select');
+        const autoCaptureEnabled = document.getElementById('auto-capture-enabled');
+        const autoCaptureInterval = document.getElementById('auto-capture-interval');
         if (captureSheetSelect) captureSheetSelect.addEventListener('change', updateSpectrogramCaptureReady);
 
         if (button) {
           button.addEventListener('click', () => {
-            const status = document.getElementById('spectrogram-status');
-            const audioEl = document.getElementById('spectrogram-audio');
-            const downloadEl = document.getElementById('spectrogram-download');
-
-            try {
-              const selectedSheet = getSelectedCaptureSheet();
-              const selectedGeometry = selectedSheet ? getFreshSheetGeometry(selectedSheet.id) : null;
-              if (!selectedSheet || !selectedGeometry) {
-                if (status) status.innerText = 'No current projection for the selected sheet. Hold that marker sheet fully in view and try again.';
-                showToast('Selected sheet is not currently detected. Capture aborted.', 'error');
-                return;
-              }
-
-              const frameData = getCurrentVideoFrameImageData();
-              if (!frameData) throw new Error('Could not read a current webcam frame.');
-
-              if (status) status.innerText = `Rectifying ${selectedGeometry.label} spectrogram...`;
-
-              const { minFreq, maxFreq, scale: activeScale } = getSpectrogramFrequencySettings();
-              const directionEl = document.getElementById('spectrogram-frequency-direction');
-              const processingModeEl = document.getElementById('spectrogram-processing-mode');
-              const blackCutoffEl = document.getElementById('spectrogram-black-cutoff');
-              const despeckleEl = document.getElementById('spectrogram-despeckle');
-              const fillGapsEl = document.getElementById('spectrogram-fill-gaps');
-              let blackCutoff = blackCutoffEl ? parseFloat(blackCutoffEl.value) : 0.34;
-              if (!Number.isFinite(blackCutoff)) blackCutoff = 0.34;
-              blackCutoff = Math.max(0.10, Math.min(0.80, blackCutoff));
-              if (blackCutoffEl) blackCutoffEl.value = blackCutoff.toFixed(2);
-
-              const extracted = extractSpectrogramFromPaper(frameData, selectedGeometry, {
-                timeBins: 256,
-                freqBins: 128,
-                direction: directionEl ? directionEl.value : 'left-low',
-                processingMode: processingModeEl ? processingModeEl.value : 'adaptive-bw',
-                blackCutoff,
-                despeckle: despeckleEl ? despeckleEl.checked : true,
-                fillGaps: fillGapsEl ? fillGapsEl.checked : true
-              });
-              renderSpectrogramPreview(extracted.preview);
-
-              if (status) status.innerText = 'Synthesizing one-second audio from spectrogram...';
-              const smoothed = smoothSpectrogramAmplitudes(extracted.amplitudes, extracted.timeBins, extracted.freqBins);
-              const spectrogramData = {
-                amplitudes: smoothed,
-                timeBins: extracted.timeBins,
-                freqBins: extracted.freqBins,
-                minFreq,
-                maxFreq,
-                scale: activeScale,
-                durationSeconds: 1,
-                createdAt: performance.now()
-              };
-              setSheetSpectrogramState(selectedGeometry.sheetId, spectrogramData, { source: 'captured sheet image' });
-
-              const audio = synthesizeAudioFromSpectrogram(smoothed, extracted.timeBins, extracted.freqBins, {
-                sampleRate: 44100,
-                durationSeconds: 1,
-                minFreq,
-                maxFreq,
-                scale: activeScale
-              });
-
-              const wavBlob = encodeWav16(audio.samples, audio.sampleRate);
-
-              if (spectrogramAudioURL) URL.revokeObjectURL(spectrogramAudioURL);
-              spectrogramAudioURL = URL.createObjectURL(wavBlob);
-
-              if (audioEl) {
-                audioEl.src = spectrogramAudioURL;
-                audioEl.classList.remove('hidden');
-                audioEl.load();
-              }
-              if (downloadEl) {
-                downloadEl.href = spectrogramAudioURL;
-                downloadEl.download = `${selectedGeometry.label.replace(/[^a-z0-9_-]+/gi, '-').toLowerCase()}-spectrogram.wav`;
-                downloadEl.classList.remove('hidden');
-              }
-
-              if (status) {
-                status.innerText = `Audio ready for ${selectedGeometry.label}: 1.0 s WAV, ${Math.round(minFreq)}-${Math.round(maxFreq)} Hz. Cutoff=${extracted.threshold.toFixed(2)}.`;
-              }
-              setFingerPlaybackStatus(`Finger playback ready for ${selectedGeometry.label}: place index fingertip over its yellow spectrogram area.`, 'waiting');
-              showToast('Spectrogram audio file created and mapped to selected sheet.', 'info');
-            } catch (err) {
-              console.error('Spectrogram capture failed:', err);
-              if (status) status.innerText = `Capture failed: ${err.message}`;
-              showToast('Spectrogram capture failed. Check the console for details.', 'error');
-            }
+            runSelectedSheetSpectrogramCapture({ trigger: 'manual' });
           });
         }
+
+        if (autoCaptureEnabled) {
+          autoCaptureEnabled.addEventListener('change', restartAutomaticSpectrogramCaptureTimer);
+        }
+
+        if (autoCaptureInterval) {
+          autoCaptureInterval.addEventListener('change', restartAutomaticSpectrogramCaptureTimer);
+          autoCaptureInterval.addEventListener('input', () => {
+            if (autoCaptureEnabled && autoCaptureEnabled.checked) restartAutomaticSpectrogramCaptureTimer();
+          });
+        }
+        restartAutomaticSpectrogramCaptureTimer();
 
         if (uploadButton) {
           uploadButton.addEventListener('click', async () => {
@@ -2446,6 +2627,19 @@
         const numHandsDetected = results.multiHandLandmarks ? results.multiHandLandmarks.length : 0;
         const metricHands = document.getElementById('metric-hands');
         if (metricHands) metricHands.innerText = numHandsDetected;
+
+        // Store the latest hand landmark positions in canvas coordinates so
+        // automatic sheet capture can skip frames where a hand is over the paper.
+        latestHandLandmarkTime = now;
+        latestHandCanvasLandmarks = [];
+        if (results.multiHandLandmarks && results.multiHandLandmarks.length) {
+          latestHandCanvasLandmarks = results.multiHandLandmarks.map(landmarks => {
+            return landmarks.map(point => ({
+              x: point.x * canvasElement.width,
+              y: point.y * canvasElement.height
+            }));
+          });
+        }
 
         // -------------------------------------------------------------
         // FIDUCIAL MARKER (ARUCO) PIPELINE
