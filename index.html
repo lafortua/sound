@@ -511,6 +511,17 @@
                                     <input type="number" id="setting-max-hands" min="1" max="4" value="2">
                                 </label>
                             </div>
+
+                            <div>
+                                <label>
+                                    <span>Index-finger Playback Hand</span>
+                                    <select id="finger-playback-hand">
+                                        <option value="Left" selected>Left hand</option>
+                                        <option value="Right">Right hand</option>
+                                    </select>
+                                </label>
+                                <div class="control-note">Only the selected hand's index fingertip controls mapped sheet-audio scrubbing.</div>
+                            </div>
                         </div>
 
                         <hr>
@@ -783,6 +794,7 @@
 
       // Web Audio oscillator bank used for live index-finger spectrogram scrubbing.
       let fingerSpectrogramSynth = null;
+      const FINGER_PLAYBACK_OUTPUT_VOLUME = 0.85;
 
       // Audio Context used by paper spectrogram playback.
       let audioCtx = null;
@@ -1503,6 +1515,39 @@
         el.className = `text-[11px] ${colorClass} font-mono`;
       }
 
+      function getSelectedFingerPlaybackHand() {
+        const el = document.getElementById('finger-playback-hand');
+        return el && el.value === 'Right' ? 'Right' : 'Left';
+      }
+
+      function handLabelToLower(handLabel) {
+        return handLabel === 'Right' ? 'right' : 'left';
+      }
+
+      function getUserHandLabelFromMediaPipeHandedness(handedness) {
+        const rawLabel = handedness && handedness.label ? handedness.label : 'Unknown';
+
+        // The app intentionally submits an unmirrored frame to MediaPipe. MediaPipe's
+        // handedness labels are defined for mirrored selfie input, so swap them here
+        // to make the UI selection refer to the user's physical left or right hand.
+        if (rawLabel === 'Left') return 'Right';
+        if (rawLabel === 'Right') return 'Left';
+        return 'Unknown';
+      }
+
+      function setupFingerPlaybackHandControl() {
+        const select = document.getElementById('finger-playback-hand');
+        if (!select) return;
+        select.addEventListener('change', () => {
+          const handLabel = getSelectedFingerPlaybackHand();
+          if (fingerSpectrogramSynth && audioCtx) {
+            fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.025);
+            fingerSpectrogramSynth.active = false;
+          }
+          setFingerPlaybackStatus(`Finger playback set to ${handLabelToLower(handLabel)} hand. Place that index fingertip over a mapped sheet.`, 'waiting');
+        });
+      }
+
       function shutdownFingerSpectrogramSynth() {
         if (!fingerSpectrogramSynth) return;
         try {
@@ -1603,15 +1648,16 @@
         return count;
       }
 
-      function updateFingerSpectrogramPlayback(indexTipPoint, sheetGeometries) {
+      function updateFingerSpectrogramPlayback(indexTipPoint, sheetGeometries, controlHand = getSelectedFingerPlaybackHand()) {
         const mappedSheetCount = getMappedSheetCount();
+        const controlHandText = handLabelToLower(controlHand);
         if (!indexTipPoint || !sheetGeometries || sheetGeometries.length === 0 || mappedSheetCount === 0) {
           if (fingerSpectrogramSynth && audioCtx) {
             fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.025);
             fingerSpectrogramSynth.active = false;
           }
           if (mappedSheetCount > 0) {
-            setFingerPlaybackStatus('Finger playback ready: place index fingertip over a mapped sheet.', 'waiting');
+            setFingerPlaybackStatus(`Finger playback ready: place the ${controlHandText} index fingertip over a mapped sheet.`, 'waiting');
           }
           return null;
         }
@@ -1632,7 +1678,7 @@
             fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.025);
             fingerSpectrogramSynth.active = false;
           }
-          setFingerPlaybackStatus('Finger playback ready: index fingertip is outside mapped sheet audio areas.', 'waiting');
+          setFingerPlaybackStatus(`Finger playback ready: the ${controlHandText} index fingertip is outside mapped sheet audio areas.`, 'waiting');
           return null;
         }
 
@@ -1652,13 +1698,13 @@
           const targetGain = amp > 0.01 ? amp * fingerSpectrogramSynth.amplitudeScale : 0;
           fingerSpectrogramSynth.gains[i].gain.setTargetAtTime(targetGain, now, 0.018);
         }
-        fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(0.85, now, 0.025);
+        fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(FINGER_PLAYBACK_OUTPUT_VOLUME, now, 0.025);
         fingerSpectrogramSynth.active = true;
 
         const durationSeconds = spectrogramData.durationSeconds || 1;
         const elapsedMs = Math.round(timeNorm * durationSeconds * 1000);
         const totalMs = Math.round(durationSeconds * 1000);
-        setFingerPlaybackStatus(`Finger playback active on ${geometry.label}: t=${elapsedMs} ms of ${totalMs} ms.`, 'active');
+        setFingerPlaybackStatus(`Finger playback active on ${geometry.label} using ${controlHandText} hand: t=${elapsedMs} ms of ${totalMs} ms.`, 'active');
         return { inside: true, sheetId: geometry.sheetId, geometry, timeNorm, u: uv.u, v: uv.v };
       }
 
@@ -1798,6 +1844,7 @@
           audioEl.playbackRate = 1;
           audioEl.currentTime = 0;
           audioEl.muted = false;
+          audioEl.volume = FINGER_PLAYBACK_OUTPUT_VOLUME;
 
           const playPromise = audioEl.play();
           if (playPromise && typeof playPromise.catch === 'function') {
@@ -3039,16 +3086,18 @@
         let telemetryLogs = [];
         let handednessArray = [];
         let indexTipCanvasPoint = null;
+        const selectedFingerPlaybackHand = getSelectedFingerPlaybackHand();
 
         // Render Detected Hand Overlays
         for (let index = 0; index < numHandsDetected; index++) {
           const landmarks = results.multiHandLandmarks[index];
-          const handedness = results.multiHandedness[index];
-          const assignedLabel = handedness ? handedness.label : "Unknown";
-          handednessArray.push(`${assignedLabel} (${Math.round(handedness.score * 100)}%)`);
+          const handedness = results.multiHandedness ? results.multiHandedness[index] : null;
+          const assignedLabel = getUserHandLabelFromMediaPipeHandedness(handedness);
+          const handednessScore = handedness && Number.isFinite(handedness.score) ? Math.round(handedness.score * 100) : 0;
+          handednessArray.push(`${assignedLabel} (${handednessScore}%)`);
 
-          // Use the first detected hand's index fingertip for spectrogram scrubbing.
-          if (index === 0 && landmarks[8]) {
+          // Use only the selected hand's index fingertip for spectrogram scrubbing.
+          if (!indexTipCanvasPoint && assignedLabel === selectedFingerPlaybackHand && landmarks[8]) {
             indexTipCanvasPoint = {
               x: landmarks[8].x * canvasElement.width,
               y: landmarks[8].y * canvasElement.height
@@ -3134,7 +3183,7 @@
           `);
         }
 
-        const fingerPlaybackState = updateFingerSpectrogramPlayback(indexTipCanvasPoint, detectedSheetGeometries);
+        const fingerPlaybackState = updateFingerSpectrogramPlayback(indexTipCanvasPoint, detectedSheetGeometries, selectedFingerPlaybackHand);
         if (fingerPlaybackState && fingerPlaybackState.inside) {
           drawFingerTimeCursor(canvasCtx, fingerPlaybackState.geometry, fingerPlaybackState, indexTipCanvasPoint);
         }
@@ -3596,6 +3645,7 @@
       window.onload = () => {
         populateDefinedSheetControls();
         setupSpectrogramControls();
+        setupFingerPlaybackHandControl();
         setupCameraSelectionControls();
         updateSpectrogramCaptureReady();
         initMediaPipe();
