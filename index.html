@@ -401,7 +401,7 @@
                             <div>
                                 <label>
                                     Black Cutoff
-                                    <input type="number" id="spectrogram-black-cutoff" min="0.10" max="0.90" step="0.01" value="0.80">
+                                    <input type="number" id="spectrogram-black-cutoff" min="0.10" max="0.90" step="0.01" value="0.84">
                                 </label>
                             </div>
 
@@ -805,9 +805,12 @@
 
       // Web Audio oscillator bank used for live index-finger spectrogram scrubbing.
       let fingerSpectrogramSynth = null;
-      const FINGER_PLAYBACK_OUTPUT_VOLUME = 0.85;
+      const FINGER_PLAYBACK_OUTPUT_VOLUME = 0.92;
       const FINGER_LOCAL_PLAYBACK_RADIUS_BINS = 3;
-      const FINGER_PLAYBACK_AMP_THRESHOLD = 0.01;
+      const FINGER_PLAYBACK_AMP_THRESHOLD = 0.08;
+      const FINGER_TIME_SLICE_RMS_TARGET = 0.52;
+      const FINGER_LOCAL_RMS_TARGET = 0.44;
+      const SPECTROGRAM_SMOOTHING_NOISE_FLOOR = 0.10;
 
       // Audio Context used by paper spectrogram playback.
       let audioCtx = null;
@@ -1394,24 +1397,29 @@
 
         const edgeMagnitude = computeSobelMagnitude01(normalizedLightness, timeBins, freqBins);
         const scores = new Float32Array(grayValues.length);
-        const edgeWeight = processingMode === 'edge-assisted' ? 0.34 : 0.10;
+        const edgeWeight = processingMode === 'edge-assisted' ? 0.18 : 0.08;
         for (let i = 0; i < scores.length; i++) {
           // Gamma increases separation between black ink/pencil and gray camera noise.
-          const contrastEnhanced = Math.pow(normalizedBlackness[i], 1.18);
+          // Keep edge assistance conservative so subtle paper texture in white areas
+          // does not become audible spectrogram content.
+          const contrastEnhanced = Math.pow(normalizedBlackness[i], 1.25);
           scores[i] = clamp01(contrastEnhanced + edgeMagnitude[i] * edgeWeight);
         }
 
         const otsu = computeOtsuThreshold01(scores);
         let threshold = userCutoff;
         if (processingMode === 'adaptive-bw') {
-          threshold = Math.max(userCutoff, Math.min(0.58, otsu * 0.92));
+          threshold = Math.max(userCutoff, Math.min(0.72, otsu * 0.98));
         } else if (processingMode === 'edge-assisted') {
-          threshold = Math.max(userCutoff * 0.86, Math.min(0.52, otsu * 0.82));
+          threshold = Math.max(userCutoff, Math.min(0.74, otsu * 0.96));
         }
 
         let binary = new Uint8Array(grayValues.length);
         for (let i = 0; i < scores.length; i++) {
-          const edgeCondition = processingMode === 'edge-assisted' && edgeMagnitude[i] > 0.32 && normalizedBlackness[i] > threshold * 0.42;
+          const edgeCondition = processingMode === 'edge-assisted'
+            && edgeMagnitude[i] > 0.44
+            && normalizedBlackness[i] > Math.max(0.52, threshold * 0.72)
+            && scores[i] >= threshold * 0.78;
           binary[i] = (scores[i] >= threshold || edgeCondition) ? 1 : 0;
         }
 
@@ -1453,20 +1461,34 @@
         const smoothed = new Float32Array(amplitudes.length);
         for (let f = 0; f < freqBins; f++) {
           for (let t = 0; t < timeBins; t++) {
+            const centerIdx = f * timeBins + t;
             let total = 0;
             let weight = 0;
+            let activeNeighborCount = 0;
+
             for (let df = -1; df <= 1; df++) {
               const ff = f + df;
               if (ff < 0 || ff >= freqBins) continue;
               for (let dt = -1; dt <= 1; dt++) {
                 const tt = t + dt;
                 if (tt < 0 || tt >= timeBins) continue;
+                const sample = amplitudes[ff * timeBins + tt];
+                if (sample > 0) activeNeighborCount++;
                 const w = (df === 0 && dt === 0) ? 4 : (df === 0 || dt === 0 ? 2 : 1);
-                total += amplitudes[ff * timeBins + tt] * w;
+                total += sample * w;
                 weight += w;
               }
             }
-            smoothed[f * timeBins + t] = total / weight;
+
+            const centerIsActive = amplitudes[centerIdx] > 0;
+            let value = total / Math.max(1, weight);
+
+            // Do not let smoothing create audible content in mostly white regions.
+            // A single dark pixel keeps its own center, but its low-amplitude halo
+            // is suppressed unless there is real nearby spectrogram content.
+            if (!centerIsActive && activeNeighborCount < 2) value = 0;
+            if (value < SPECTROGRAM_SMOOTHING_NOISE_FLOOR) value = 0;
+            smoothed[centerIdx] = value;
           }
         }
         return smoothed;
@@ -1660,7 +1682,7 @@
           oscillators,
           gains,
           binIndices,
-          amplitudeScale: 0.20 / Math.max(1, Math.sqrt(oscillatorCount)),
+          amplitudeScale: 1,
           active: false
         };
         activeFingerSpectrogramSheetId = sheetId;
@@ -1769,16 +1791,33 @@
         const centerTimeBin = Math.max(0, Math.min(spectrogramData.timeBins - 1, Math.round(timeNorm * (spectrogramData.timeBins - 1))));
         const centerFreqBin = sheetUToSpectrogramFreqBin(spectrogramData, uv.u);
         const now = audioCtx.currentTime;
+        const oscillatorAmplitudes = new Float32Array(fingerSpectrogramSynth.gains.length);
         let activeOscillatorCount = 0;
+        let activeAmplitudePower = 0;
 
         for (let i = 0; i < fingerSpectrogramSynth.gains.length; i++) {
           const bin = fingerSpectrogramSynth.binIndices[i];
           const amp = playbackMode === 'local-frequency'
             ? sampleLocalFrequencyAmplitude(spectrogramData, bin, centerFreqBin, centerTimeBin)
             : sampleSpectrogramAmplitudeAtTime(spectrogramData, bin, timeNorm);
-          const targetGain = amp > FINGER_PLAYBACK_AMP_THRESHOLD ? amp * fingerSpectrogramSynth.amplitudeScale : 0;
-          if (targetGain > 0) activeOscillatorCount++;
-          fingerSpectrogramSynth.gains[i].gain.setTargetAtTime(targetGain, now, 0.018);
+
+          if (amp > FINGER_PLAYBACK_AMP_THRESHOLD) {
+            oscillatorAmplitudes[i] = amp;
+            activeOscillatorCount++;
+            activeAmplitudePower += amp * amp;
+          }
+        }
+
+        const rmsTarget = playbackMode === 'local-frequency' ? FINGER_LOCAL_RMS_TARGET : FINGER_TIME_SLICE_RMS_TARGET;
+        const dynamicGainScale = activeOscillatorCount > 0
+          ? rmsTarget / Math.max(0.35, Math.sqrt(activeAmplitudePower))
+          : 0;
+
+        for (let i = 0; i < fingerSpectrogramSynth.gains.length; i++) {
+          const targetGain = oscillatorAmplitudes[i] > 0
+            ? Math.min(0.75, oscillatorAmplitudes[i] * dynamicGainScale * fingerSpectrogramSynth.amplitudeScale)
+            : 0;
+          fingerSpectrogramSynth.gains[i].gain.setTargetAtTime(targetGain, now, 0.014);
         }
 
         const durationSeconds = spectrogramData.durationSeconds || 1;
@@ -2160,7 +2199,7 @@
         const fillGapsEl = document.getElementById('spectrogram-fill-gaps');
         let blackCutoff = blackCutoffEl ? parseFloat(blackCutoffEl.value) : 0.34;
         if (!Number.isFinite(blackCutoff)) blackCutoff = 0.34;
-        blackCutoff = Math.max(0.10, Math.min(0.80, blackCutoff));
+        blackCutoff = Math.max(0.10, Math.min(0.90, blackCutoff));
         if (blackCutoffEl) blackCutoffEl.value = blackCutoff.toFixed(2);
 
         return {
