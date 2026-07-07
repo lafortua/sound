@@ -420,6 +420,14 @@
                             </div>
 
                             <div>
+                                <label>
+                                    <span>Exclude Border Bins</span>
+                                    <input type="number" id="spectrogram-border-exclusion-bins" min="0" max="64" step="1" value="0">
+                                </label>
+                                <div class="control-note">Sets audio amplitude to zero for the outer n spectrogram bins along all four edges of the captured content area.</div>
+                            </div>
+
+                            <div>
                                 <button id="capture-spectrogram-btn" disabled>Capture Sheet and Build Audio</button>
                             </div>
 
@@ -1347,6 +1355,46 @@
         }
 
         return out;
+      }
+
+      function clampBorderExclusionBins(borderBins, timeBins, freqBins) {
+        const requested = Number.isFinite(borderBins) ? Math.floor(borderBins) : 0;
+        const maxUsefulBorder = Math.floor(Math.min(timeBins, freqBins) / 2);
+        return Math.max(0, Math.min(maxUsefulBorder, requested));
+      }
+
+      function applySpectrogramBorderExclusion(amplitudes, timeBins, freqBins, borderBins = 0) {
+        const n = clampBorderExclusionBins(borderBins, timeBins, freqBins);
+        if (n <= 0) return amplitudes;
+
+        const out = new Float32Array(amplitudes);
+        for (let f = 0; f < freqBins; f++) {
+          for (let t = 0; t < timeBins; t++) {
+            if (t < n || t >= timeBins - n || f < n || f >= freqBins - n) {
+              out[f * timeBins + t] = 0;
+            }
+          }
+        }
+        return out;
+      }
+
+      function applySpectrogramBorderExclusionToPreview(imageData, borderBins = 0) {
+        const n = clampBorderExclusionBins(borderBins, imageData.width, imageData.height);
+        if (n <= 0) return imageData;
+
+        const preview = new ImageData(new Uint8ClampedArray(imageData.data), imageData.width, imageData.height);
+        for (let y = 0; y < preview.height; y++) {
+          for (let x = 0; x < preview.width; x++) {
+            if (x < n || x >= preview.width - n || y < n || y >= preview.height - n) {
+              const p = (y * preview.width + x) * 4;
+              preview.data[p] = 255;
+              preview.data[p + 1] = 255;
+              preview.data[p + 2] = 255;
+              preview.data[p + 3] = 255;
+            }
+          }
+        }
+        return preview;
       }
 
       function extractSpectrogramFromPaper(frameData, paperGeometry, options = {}) {
@@ -2302,17 +2350,24 @@
         const blackCutoffEl = document.getElementById('spectrogram-black-cutoff');
         const despeckleEl = document.getElementById('spectrogram-despeckle');
         const fillGapsEl = document.getElementById('spectrogram-fill-gaps');
+        const borderExclusionEl = document.getElementById('spectrogram-border-exclusion-bins');
         let blackCutoff = blackCutoffEl ? parseFloat(blackCutoffEl.value) : 0.34;
         if (!Number.isFinite(blackCutoff)) blackCutoff = 0.34;
         blackCutoff = Math.max(0.10, Math.min(0.90, blackCutoff));
         if (blackCutoffEl) blackCutoffEl.value = blackCutoff.toFixed(2);
+
+        let borderExclusionBins = borderExclusionEl ? parseInt(borderExclusionEl.value, 10) : 0;
+        if (!Number.isFinite(borderExclusionBins)) borderExclusionBins = 0;
+        borderExclusionBins = Math.max(0, Math.min(64, borderExclusionBins));
+        if (borderExclusionEl) borderExclusionEl.value = String(borderExclusionBins);
 
         return {
           direction: directionEl ? directionEl.value : 'left-low',
           processingMode: processingModeEl ? processingModeEl.value : 'adaptive-bw',
           blackCutoff,
           despeckle: despeckleEl ? despeckleEl.checked : true,
-          fillGaps: fillGapsEl ? fillGapsEl.checked : true
+          fillGaps: fillGapsEl ? fillGapsEl.checked : true,
+          borderExclusionBins
         };
       }
 
@@ -2422,10 +2477,27 @@
             freqBins: 128,
             ...imageSettings
           });
-          renderSpectrogramPreview(extracted.preview);
+
+          const borderExclusionBins = clampBorderExclusionBins(
+            imageSettings.borderExclusionBins,
+            extracted.timeBins,
+            extracted.freqBins
+          );
+          const borderExcludedAmplitudes = applySpectrogramBorderExclusion(
+            extracted.amplitudes,
+            extracted.timeBins,
+            extracted.freqBins,
+            borderExclusionBins
+          );
+          renderSpectrogramPreview(applySpectrogramBorderExclusionToPreview(extracted.preview, borderExclusionBins));
 
           if (status) status.innerText = 'Synthesizing one-second audio from spectrogram...';
-          const smoothed = smoothSpectrogramAmplitudes(extracted.amplitudes, extracted.timeBins, extracted.freqBins);
+          const smoothed = applySpectrogramBorderExclusion(
+            smoothSpectrogramAmplitudes(borderExcludedAmplitudes, extracted.timeBins, extracted.freqBins),
+            extracted.timeBins,
+            extracted.freqBins,
+            borderExclusionBins
+          );
           const spectrogramData = {
             amplitudes: smoothed,
             timeBins: extracted.timeBins,
@@ -2435,6 +2507,7 @@
             scale: activeScale,
             direction: imageSettings.direction,
             durationSeconds: 1,
+            borderExclusionBins,
             createdAt: performance.now()
           };
           setSheetSpectrogramState(selectedGeometry.sheetId, spectrogramData, { source: 'captured sheet image' });
@@ -2464,7 +2537,8 @@
           }
 
           if (status) {
-            status.innerText = `Audio ready for ${selectedGeometry.label}: 1.0 s WAV, ${Math.round(minFreq)}-${Math.round(maxFreq)} Hz. Cutoff=${extracted.threshold.toFixed(2)}.`;
+            const borderText = borderExclusionBins > 0 ? ` Border excluded=${borderExclusionBins} bin(s).` : '';
+            status.innerText = `Audio ready for ${selectedGeometry.label}: 1.0 s WAV, ${Math.round(minFreq)}-${Math.round(maxFreq)} Hz. Cutoff=${extracted.threshold.toFixed(2)}.${borderText}`;
           }
 
           if (isAutomatic) {
