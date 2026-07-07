@@ -356,14 +356,14 @@
                             <div>
                                 <label>
                                     Min Frequency
-                                    <input type="number" id="spectrogram-min-freq" min="20" max="20000" value="80">
+                                    <input type="number" id="spectrogram-min-freq" min="20" max="20000" value="200">
                                 </label>
                             </div>
 
                             <div>
                                 <label>
                                     Max Frequency
-                                    <input type="number" id="spectrogram-max-freq" min="20" max="20000" value="4000">
+                                    <input type="number" id="spectrogram-max-freq" min="20" max="20000" value="3500">
                                 </label>
                             </div>
 
@@ -459,7 +459,7 @@
                                 <div id="uploaded-audio-status">No uploaded audio mapped.</div>
                             </div>
 
-                            <div id="finger-playback-status">Finger playback: create or upload audio, then place the index fingertip over the yellow spectrogram area.</div>
+                            <div id="finger-playback-status">Finger playback: create or upload audio, then place the index fingertip over the yellow spectrogram area. Local-frequency mode also uses the middle fingertip.</div>
                         </div>
                     </div>
                 </div>
@@ -514,24 +514,24 @@
 
                             <div>
                                 <label>
-                                    <span>Index-finger Playback Hand</span>
+                                    <span>Finger Playback Hand</span>
                                     <select id="finger-playback-hand">
-                                        <option value="Left" selected>Left hand</option>
-                                        <option value="Right">Right hand</option>
+                                        <option value="Left">Left hand</option>
+                                        <option value="Right" selected>Right hand</option>
                                     </select>
                                 </label>
-                                <div class="control-note">Only the selected hand's index fingertip controls mapped sheet-audio scrubbing.</div>
+                                <div class="control-note">Only the selected hand controls mapped sheet-audio scrubbing. Time-slice uses the index fingertip; local-frequency uses the index and middle fingertips.</div>
                             </div>
 
                             <div>
                                 <label>
-                                    <span>Index-finger Playback Mode</span>
+                                    <span>Finger Playback Mode</span>
                                     <select id="finger-playback-mode">
-                                        <option value="time-slice" selected>Time slice: all active frequencies</option>
-                                        <option value="local-frequency">Fingertip-local frequencies only</option>
+                                        <option value="time-slice">Time slice: all active frequencies</option>
+                                        <option value="local-frequency" selected>Fingertip-local frequencies only</option>
                                     </select>
                                 </label>
-                                <div class="control-note">Fingertip-local mode plays only spectrogram bins with amplitude inside a ±3 bin region around the fingertip.</div>
+                                <div class="control-note">Fingertip-local mode plays only spectrogram bins with amplitude inside the local region around the selected hand's index and middle fingertips.</div>
                             </div>
                         </div>
 
@@ -803,14 +803,14 @@
       let sheetTrackingStates = new Map();
       const PAPER_OCCLUSION_PIXEL_LIMIT = 20;
 
-      // Web Audio oscillator bank used for live index-finger spectrogram scrubbing.
+      // Web Audio oscillator bank used for live finger-controlled spectrogram scrubbing.
       let fingerSpectrogramSynth = null;
       const FINGER_PLAYBACK_OUTPUT_VOLUME = 0.92;
-      const FINGER_LOCAL_PLAYBACK_RADIUS_BINS = 3;
+      const FINGER_LOCAL_PLAYBACK_RADIUS_BINS = 6;
       const FINGER_PLAYBACK_AMP_THRESHOLD = 0.08;
       const FINGER_TIME_SLICE_RMS_TARGET = 0.52;
       const FINGER_LOCAL_RMS_TARGET = 0.44;
-      const SPECTROGRAM_SMOOTHING_NOISE_FLOOR = 0.10;
+      const SPECTROGRAM_SMOOTHING_NOISE_FLOOR = 0.20;
 
       // Audio Context used by paper spectrogram playback.
       let audioCtx = null;
@@ -1594,7 +1594,7 @@
           handSelect.addEventListener('change', () => {
             const handLabel = getSelectedFingerPlaybackHand();
             fadeFingerPlayback();
-            setFingerPlaybackStatus(`Finger playback set to ${handLabelToLower(handLabel)} hand. Place that index fingertip over a mapped sheet.`, 'waiting');
+            setFingerPlaybackStatus(`Finger playback set to ${handLabelToLower(handLabel)} hand. Time-slice uses the index fingertip; local-frequency uses index and middle.`, 'waiting');
           });
         }
 
@@ -1602,7 +1602,7 @@
           modeSelect.addEventListener('change', () => {
             const mode = getSelectedFingerPlaybackMode();
             fadeFingerPlayback();
-            setFingerPlaybackStatus(`Finger playback mode set to ${playbackModeLabel(mode)}. Place the selected index fingertip over a mapped sheet.`, 'waiting');
+            setFingerPlaybackStatus(`Finger playback mode set to ${playbackModeLabel(mode)}. Time-slice uses the index fingertip; local-frequency uses index and middle.`, 'waiting');
           });
         }
       }
@@ -1736,6 +1736,51 @@
         return count;
       }
 
+
+      function buildLocalFingerPlaybackRegion(spectrogramData, uv, fingerName, point) {
+        const timeNorm = uv.v; // Long side of the printed sheet is the time axis.
+        const centerTimeBin = Math.max(0, Math.min(spectrogramData.timeBins - 1, Math.round(timeNorm * (spectrogramData.timeBins - 1))));
+        const centerFreqBin = sheetUToSpectrogramFreqBin(spectrogramData, uv.u);
+        return {
+          fingerName,
+          fingerLabel: fingerName === 'middle' ? 'Middle' : 'Index',
+          point,
+          u: uv.u,
+          v: uv.v,
+          timeNorm,
+          centerTimeBin,
+          centerFreqBin
+        };
+      }
+
+      function countActiveSpectrogramBinsInFingerRegions(spectrogramData, regions, radius = FINGER_LOCAL_PLAYBACK_RADIUS_BINS) {
+        const activeFreqBins = new Set();
+        for (const region of regions) {
+          const fMin = Math.max(0, region.centerFreqBin - radius);
+          const fMax = Math.min(spectrogramData.freqBins - 1, region.centerFreqBin + radius);
+          const tMin = Math.max(0, region.centerTimeBin - radius);
+          const tMax = Math.min(spectrogramData.timeBins - 1, region.centerTimeBin + radius);
+
+          for (let f = fMin; f <= fMax; f++) {
+            for (let t = tMin; t <= tMax; t++) {
+              if ((spectrogramData.amplitudes[f * spectrogramData.timeBins + t] || 0) > FINGER_PLAYBACK_AMP_THRESHOLD) {
+                activeFreqBins.add(f);
+                break;
+              }
+            }
+          }
+        }
+        return activeFreqBins.size;
+      }
+
+      function formatLocalFingerRegionStatus(regions, spectrogramData, durationSeconds) {
+        return regions.map(region => {
+          const centerHz = frequencyForBin(region.centerFreqBin, spectrogramData.freqBins, spectrogramData.minFreq, spectrogramData.maxFreq, spectrogramData.scale);
+          const elapsedMs = Math.round(region.timeNorm * durationSeconds * 1000);
+          return `${region.fingerLabel.toLowerCase()} f≈${Math.round(centerHz)} Hz, t=${elapsedMs} ms`;
+        }).join('; ');
+      }
+
       function getMappedSheetCount() {
         let count = 0;
         for (const sheet of DEFINED_SHEETS) {
@@ -1744,30 +1789,52 @@
         return count;
       }
 
-      function updateFingerSpectrogramPlayback(indexTipPoint, sheetGeometries, controlHand = getSelectedFingerPlaybackHand()) {
+      function updateFingerSpectrogramPlayback(indexTipPoint, sheetGeometries, controlHand = getSelectedFingerPlaybackHand(), middleTipPoint = null) {
         const mappedSheetCount = getMappedSheetCount();
         const controlHandText = handLabelToLower(controlHand);
         const playbackMode = getSelectedFingerPlaybackMode();
-        if (!indexTipPoint || !sheetGeometries || sheetGeometries.length === 0 || mappedSheetCount === 0) {
+        const isLocalFrequencyMode = playbackMode === 'local-frequency';
+        const selectedTipCandidates = [
+          { fingerName: 'index', fingerLabel: 'Index', point: indexTipPoint },
+          { fingerName: 'middle', fingerLabel: 'Middle', point: middleTipPoint }
+        ].filter(candidate => candidate.point);
+        const activeTipCandidates = isLocalFrequencyMode
+          ? selectedTipCandidates
+          : selectedTipCandidates.filter(candidate => candidate.fingerName === 'index');
+        const readyTipText = isLocalFrequencyMode
+          ? `${controlHandText} index or middle fingertip`
+          : `${controlHandText} index fingertip`;
+
+        if (activeTipCandidates.length === 0 || !sheetGeometries || sheetGeometries.length === 0 || mappedSheetCount === 0) {
           if (fingerSpectrogramSynth && audioCtx) {
             fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.025);
             fingerSpectrogramSynth.active = false;
           }
           if (mappedSheetCount > 0) {
-            setFingerPlaybackStatus(`Finger playback ready: place the ${controlHandText} index fingertip over a mapped sheet.`, 'waiting');
+            setFingerPlaybackStatus(`Finger playback ready: place the ${readyTipText} over a mapped sheet.`, 'waiting');
           }
           return null;
         }
 
         let selected = null;
-        for (const geometry of sheetGeometries) {
-          const state = sheetAudioStates.get(geometry.sheetId);
-          if (!state) continue;
-          const uv = pointToUnitSquare(indexTipPoint, geometry.contentQuad);
-          if (uv) {
-            selected = { geometry, state, uv };
-            break;
+        // In local-frequency mode, the index fingertip keeps priority for choosing
+        // the mapped sheet. If the index fingertip is outside, the middle fingertip
+        // can still activate local playback on a mapped sheet.
+        const selectionCandidates = isLocalFrequencyMode
+          ? activeTipCandidates
+          : activeTipCandidates.filter(candidate => candidate.fingerName === 'index');
+
+        for (const candidate of selectionCandidates) {
+          for (const geometry of sheetGeometries) {
+            const state = sheetAudioStates.get(geometry.sheetId);
+            if (!state) continue;
+            const uv = pointToUnitSquare(candidate.point, geometry.contentQuad);
+            if (uv) {
+              selected = { geometry, state, uv, selectedFinger: candidate };
+              break;
+            }
           }
+          if (selected) break;
         }
 
         if (!selected) {
@@ -1775,7 +1842,7 @@
             fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(0, audioCtx.currentTime, 0.025);
             fingerSpectrogramSynth.active = false;
           }
-          setFingerPlaybackStatus(`Finger playback ready: the ${controlHandText} index fingertip is outside mapped sheet audio areas.`, 'waiting');
+          setFingerPlaybackStatus(`Finger playback ready: the ${readyTipText} is outside mapped sheet audio areas.`, 'waiting');
           return null;
         }
 
@@ -1787,6 +1854,16 @@
         if (!fingerSpectrogramSynth || !audioCtx) return null;
         if (audioCtx.state === 'suspended') audioCtx.resume();
 
+        const localRegions = [];
+        if (isLocalFrequencyMode) {
+          for (const candidate of selectedTipCandidates) {
+            if (!candidate.point) continue;
+            const candidateUv = pointToUnitSquare(candidate.point, geometry.contentQuad);
+            if (!candidateUv) continue;
+            localRegions.push(buildLocalFingerPlaybackRegion(spectrogramData, candidateUv, candidate.fingerName, candidate.point));
+          }
+        }
+
         const timeNorm = uv.v; // Long side of the printed sheet is the time axis.
         const centerTimeBin = Math.max(0, Math.min(spectrogramData.timeBins - 1, Math.round(timeNorm * (spectrogramData.timeBins - 1))));
         const centerFreqBin = sheetUToSpectrogramFreqBin(spectrogramData, uv.u);
@@ -1797,9 +1874,15 @@
 
         for (let i = 0; i < fingerSpectrogramSynth.gains.length; i++) {
           const bin = fingerSpectrogramSynth.binIndices[i];
-          const amp = playbackMode === 'local-frequency'
-            ? sampleLocalFrequencyAmplitude(spectrogramData, bin, centerFreqBin, centerTimeBin)
-            : sampleSpectrogramAmplitudeAtTime(spectrogramData, bin, timeNorm);
+          let amp = 0;
+
+          if (isLocalFrequencyMode) {
+            for (const region of localRegions) {
+              amp = Math.max(amp, sampleLocalFrequencyAmplitude(spectrogramData, bin, region.centerFreqBin, region.centerTimeBin));
+            }
+          } else {
+            amp = sampleSpectrogramAmplitudeAtTime(spectrogramData, bin, timeNorm);
+          }
 
           if (amp > FINGER_PLAYBACK_AMP_THRESHOLD) {
             oscillatorAmplitudes[i] = amp;
@@ -1808,7 +1891,7 @@
           }
         }
 
-        const rmsTarget = playbackMode === 'local-frequency' ? FINGER_LOCAL_RMS_TARGET : FINGER_TIME_SLICE_RMS_TARGET;
+        const rmsTarget = isLocalFrequencyMode ? FINGER_LOCAL_RMS_TARGET : FINGER_TIME_SLICE_RMS_TARGET;
         const dynamicGainScale = activeOscillatorCount > 0
           ? rmsTarget / Math.max(0.35, Math.sqrt(activeAmplitudePower))
           : 0;
@@ -1824,17 +1907,20 @@
         const elapsedMs = Math.round(timeNorm * durationSeconds * 1000);
         const totalMs = Math.round(durationSeconds * 1000);
 
-        if (playbackMode === 'local-frequency') {
-          const activeRegionBins = countActiveSpectrogramBinsInFingerRegion(spectrogramData, centerFreqBin, centerTimeBin);
+        if (isLocalFrequencyMode) {
+          const activeRegionBins = countActiveSpectrogramBinsInFingerRegions(spectrogramData, localRegions);
+          const localFingerText = localRegions.length > 1
+            ? 'index/middle fingertips'
+            : `${(localRegions[0] ? localRegions[0].fingerLabel : selected.selectedFinger.fingerLabel).toLowerCase()} fingertip`;
           if (activeOscillatorCount === 0) {
             fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(0, now, 0.025);
             fingerSpectrogramSynth.active = false;
-            setFingerPlaybackStatus(`Finger playback silent on ${geometry.label}: no spectrogram amplitude within ±${FINGER_LOCAL_PLAYBACK_RADIUS_BINS} bins at t=${elapsedMs} ms.`, 'waiting');
+            setFingerPlaybackStatus(`Finger playback silent on ${geometry.label}: no spectrogram amplitude within ±${FINGER_LOCAL_PLAYBACK_RADIUS_BINS} bins of the ${localFingerText}.`, 'waiting');
           } else {
             fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(FINGER_PLAYBACK_OUTPUT_VOLUME, now, 0.025);
             fingerSpectrogramSynth.active = true;
-            const centerHz = frequencyForBin(centerFreqBin, spectrogramData.freqBins, spectrogramData.minFreq, spectrogramData.maxFreq, spectrogramData.scale);
-            setFingerPlaybackStatus(`Finger playback active on ${geometry.label} using ${controlHandText} hand: local f≈${Math.round(centerHz)} Hz, t=${elapsedMs} ms of ${totalMs} ms, ${activeRegionBins} active bin(s).`, 'active');
+            const regionStatus = formatLocalFingerRegionStatus(localRegions, spectrogramData, durationSeconds);
+            setFingerPlaybackStatus(`Finger playback active on ${geometry.label} using ${controlHandText} hand: ${regionStatus}, ${activeRegionBins} active bin(s).`, 'active');
           }
         } else {
           fingerSpectrogramSynth.outputGain.gain.setTargetAtTime(FINGER_PLAYBACK_OUTPUT_VOLUME, now, 0.025);
@@ -1852,11 +1938,12 @@
           centerTimeBin,
           radiusBins: FINGER_LOCAL_PLAYBACK_RADIUS_BINS,
           u: uv.u,
-          v: uv.v
+          v: uv.v,
+          localRegions
         };
       }
 
-      function drawFingerTimeCursor(ctx, paperGeometry, playbackState, indexTipPoint) {
+      function drawFingerTimeCursor(ctx, paperGeometry, playbackState, indexTipPoint, middleTipPoint = null) {
         if (!playbackState || !paperGeometry) return;
         const mapPoint = unitSquareToQuadMapper(paperGeometry.contentQuad);
         if (!mapPoint) return;
@@ -1869,26 +1956,32 @@
         if (playbackState.mode === 'local-frequency') {
           const uRadius = playbackState.radiusBins / Math.max(1, (sheetAudioStates.get(playbackState.sheetId)?.spectrogramData.freqBins || 128) - 1);
           const vRadius = playbackState.radiusBins / Math.max(1, (sheetAudioStates.get(playbackState.sheetId)?.spectrogramData.timeBins || 256) - 1);
-          const u0 = clamp01(playbackState.u - uRadius);
-          const u1 = clamp01(playbackState.u + uRadius);
-          const v0 = clamp01(playbackState.v - vRadius);
-          const v1 = clamp01(playbackState.v + vRadius);
-          const localQuad = [
-            mapPoint(u0, v0),
-            mapPoint(u1, v0),
-            mapPoint(u1, v1),
-            mapPoint(u0, v1)
-          ];
+          const regions = playbackState.localRegions && playbackState.localRegions.length
+            ? playbackState.localRegions
+            : [{ u: playbackState.u, v: playbackState.v, point: indexTipPoint, fingerLabel: 'Index' }];
 
-          ctx.fillStyle = 'rgba(249, 115, 22, 0.20)';
-          ctx.beginPath();
-          ctx.moveTo(localQuad[0].x, localQuad[0].y);
-          ctx.lineTo(localQuad[1].x, localQuad[1].y);
-          ctx.lineTo(localQuad[2].x, localQuad[2].y);
-          ctx.lineTo(localQuad[3].x, localQuad[3].y);
-          ctx.closePath();
-          ctx.fill();
-          ctx.stroke();
+          for (const region of regions) {
+            const u0 = clamp01(region.u - uRadius);
+            const u1 = clamp01(region.u + uRadius);
+            const v0 = clamp01(region.v - vRadius);
+            const v1 = clamp01(region.v + vRadius);
+            const localQuad = [
+              mapPoint(u0, v0),
+              mapPoint(u1, v0),
+              mapPoint(u1, v1),
+              mapPoint(u0, v1)
+            ];
+
+            ctx.fillStyle = 'rgba(249, 115, 22, 0.20)';
+            ctx.beginPath();
+            ctx.moveTo(localQuad[0].x, localQuad[0].y);
+            ctx.lineTo(localQuad[1].x, localQuad[1].y);
+            ctx.lineTo(localQuad[2].x, localQuad[2].y);
+            ctx.lineTo(localQuad[3].x, localQuad[3].y);
+            ctx.closePath();
+            ctx.fill();
+            ctx.stroke();
+          }
         } else {
           const a = mapPoint(0, playbackState.timeNorm);
           const b = mapPoint(1, playbackState.timeNorm);
@@ -1898,14 +1991,26 @@
           ctx.stroke();
         }
 
-        if (indexTipPoint) {
+        const highlightedTips = playbackState.mode === 'local-frequency'
+          ? ((playbackState.localRegions && playbackState.localRegions.length)
+            ? playbackState.localRegions.map(region => ({ point: region.point, label: region.fingerName === 'middle' ? 'M' : 'I' }))
+            : [{ point: indexTipPoint, label: 'I' }, { point: middleTipPoint, label: 'M' }])
+          : [{ point: indexTipPoint, label: 'I' }];
+
+        for (const tip of highlightedTips) {
+          if (!tip.point) continue;
           ctx.fillStyle = 'rgba(249, 115, 22, 0.65)';
           ctx.beginPath();
-          ctx.arc(indexTipPoint.x, indexTipPoint.y, 11, 0, 2 * Math.PI);
+          ctx.arc(tip.point.x, tip.point.y, 11, 0, 2 * Math.PI);
           ctx.fill();
           ctx.strokeStyle = '#ffffff';
           ctx.lineWidth = 2;
           ctx.stroke();
+          ctx.fillStyle = '#111827';
+          ctx.font = 'bold 11px monospace';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText(tip.label, tip.point.x, tip.point.y);
         }
         ctx.restore();
       }
@@ -2366,7 +2471,7 @@
             playAutomaticCaptureAudioAtNormalSpeed(audioEl, status);
           }
 
-          setFingerPlaybackStatus(`Finger playback ready for ${selectedGeometry.label}: place index fingertip over its yellow spectrogram area.`, 'waiting');
+          setFingerPlaybackStatus(`Finger playback ready for ${selectedGeometry.label}: time-slice uses the index fingertip; local-frequency uses index and middle.`, 'waiting');
           if (!isAutomatic) showToast('Spectrogram audio file created and mapped to selected sheet.', 'info');
           return { ok: true, skipped: false, sheetLabel: selectedGeometry.label };
         } catch (err) {
@@ -2487,7 +2592,7 @@
               if (status) {
                 status.innerText = `Mapped uploaded audio to ${selectedSheet.label || selectedSheet.id}: ${file.name}, ${transformed.durationSeconds.toFixed(2)} s, ${Math.round(transformed.minFreq)}-${Math.round(transformed.maxFreq)} Hz.`;
               }
-              setFingerPlaybackStatus(`Finger playback ready for ${selectedSheet.label || selectedSheet.id}: place index fingertip over that sheet.`, 'waiting');
+              setFingerPlaybackStatus(`Finger playback ready for ${selectedSheet.label || selectedSheet.id}: time-slice uses the index fingertip; local-frequency uses index and middle.`, 'waiting');
               showToast('Uploaded audio transformed to a spectrogram and mapped to the selected sheet.', 'info');
             } catch (err) {
               console.error('Uploaded audio spectrogram failed:', err);
@@ -3264,6 +3369,7 @@
         let telemetryLogs = [];
         let handednessArray = [];
         let indexTipCanvasPoint = null;
+        let middleTipCanvasPoint = null;
         const selectedFingerPlaybackHand = getSelectedFingerPlaybackHand();
 
         // Render Detected Hand Overlays
@@ -3274,12 +3380,21 @@
           const handednessScore = handedness && Number.isFinite(handedness.score) ? Math.round(handedness.score * 100) : 0;
           handednessArray.push(`${assignedLabel} (${handednessScore}%)`);
 
-          // Use only the selected hand's index fingertip for spectrogram scrubbing.
-          if (!indexTipCanvasPoint && assignedLabel === selectedFingerPlaybackHand && landmarks[8]) {
-            indexTipCanvasPoint = {
-              x: landmarks[8].x * canvasElement.width,
-              y: landmarks[8].y * canvasElement.height
-            };
+          // Use the selected hand's fingertips for spectrogram scrubbing.
+          // Time-slice mode uses the index fingertip; local-frequency mode uses index and middle.
+          if (assignedLabel === selectedFingerPlaybackHand) {
+            if (!indexTipCanvasPoint && landmarks[8]) {
+              indexTipCanvasPoint = {
+                x: landmarks[8].x * canvasElement.width,
+                y: landmarks[8].y * canvasElement.height
+              };
+            }
+            if (!middleTipCanvasPoint && landmarks[12]) {
+              middleTipCanvasPoint = {
+                x: landmarks[12].x * canvasElement.width,
+                y: landmarks[12].y * canvasElement.height
+              };
+            }
           }
 
           // Draw Skeleton Lines if enabled
@@ -3297,8 +3412,8 @@
               let radius = 4.5;
               let drawColor = customNodeColor;
 
-              // Tip Points index markers
-              const isTip = [8].includes(i);
+              // Playback fingertip markers
+              const isTip = [8, 12].includes(i);
               if (isTip && renderHighlightTips) {
                 radius = 8;
                 drawColor = "#f59e0b"; // Golden light
@@ -3361,9 +3476,9 @@
           `);
         }
 
-        const fingerPlaybackState = updateFingerSpectrogramPlayback(indexTipCanvasPoint, detectedSheetGeometries, selectedFingerPlaybackHand);
+        const fingerPlaybackState = updateFingerSpectrogramPlayback(indexTipCanvasPoint, detectedSheetGeometries, selectedFingerPlaybackHand, middleTipCanvasPoint);
         if (fingerPlaybackState && fingerPlaybackState.inside) {
-          drawFingerTimeCursor(canvasCtx, fingerPlaybackState.geometry, fingerPlaybackState, indexTipCanvasPoint);
+          drawFingerTimeCursor(canvasCtx, fingerPlaybackState.geometry, fingerPlaybackState, indexTipCanvasPoint, middleTipCanvasPoint);
         }
 
         // Populate Telemetry Log for detected sheet surfaces
