@@ -338,8 +338,27 @@
                     <div>
                         <div>
                             <span id="spectrogram-ready-pill">No paper</span>
-                            <p>Captures the detected sheet, rectifies the central area between the four markers, treats black as high amplitude, and synthesizes one second of audio.</p>
                         </div>
+
+                        <div>
+                            <button id="capture-spectrogram-btn" disabled>Capture Sheet and Build Audio</button>
+                        </div>
+
+                        <div>
+                            <strong>Automatic capture</strong>
+                            <label>
+                                <span>Enable automatic capture</span>
+                                <input type="checkbox" id="auto-capture-enabled" checked>
+                            </label>
+                            <label>
+                                <span>Capture Interval Seconds</span>
+                                <input type="number" id="auto-capture-interval" min="1" max="3600" step="1" value="5">
+                            </label>
+                            <div class="control-note">Automatic capture only runs when all four selected-sheet markers are detected and no hand is over the paper.</div>
+                            <div id="auto-capture-status">Automatic capture is off.</div>
+                        </div>
+
+                        <div id="spectrogram-status">Waiting for projected paper.</div>
                         
                         <div>
                             <strong>Sheet mapping</strong>
@@ -363,7 +382,7 @@
                             <div>
                                 <label>
                                     Max Frequency
-                                    <input type="number" id="spectrogram-max-freq" min="20" max="20000" value="3500">
+                                    <input type="number" id="spectrogram-max-freq" min="20" max="20000" value="4000">
                                 </label>
                             </div>
 
@@ -422,36 +441,12 @@
                             <div>
                                 <label>
                                     <span>Exclude Border Bins</span>
-                                    <input type="number" id="spectrogram-border-exclusion-bins" min="0" max="64" step="1" value="0">
+                                    <input type="number" id="spectrogram-border-exclusion-bins" min="0" max="64" step="1" value="3">
                                 </label>
                                 <div class="control-note">Sets audio amplitude to zero for the outer n spectrogram bins along all four edges of the captured content area.</div>
                             </div>
 
-                            <div>
-                                <button id="capture-spectrogram-btn" disabled>Capture Sheet and Build Audio</button>
-                            </div>
-
-                            <div>
-                                <strong>Automatic capture</strong>
-                                <label>
-                                    <span>Enable automatic capture</span>
-                                    <input type="checkbox" id="auto-capture-enabled">
-                                </label>
-                                <label>
-                                    <span>Capture Interval Seconds</span>
-                                    <input type="number" id="auto-capture-interval" min="1" max="3600" step="1" value="5">
-                                </label>
-                                <div class="control-note">Automatic capture only runs when all four selected-sheet markers are detected and no hand is over the paper.</div>
-                                <div id="auto-capture-status">Automatic capture is off.</div>
-                            </div>
-
-                            <div>
-                                <canvas id="spectrogram-preview" width="256" height="128"></canvas>
-                                <audio id="spectrogram-audio" controls></audio>
-                                <a id="spectrogram-download" download="paper-spectrogram.wav">Download WAV</a>
-                            </div>
-
-                            <div id="spectrogram-status">Waiting for projected paper.</div>
+                            <hr>
 
                             <div>
                                 <strong>Uploaded audio mapping</strong>
@@ -724,6 +719,12 @@
                             </tr>
                             </tbody>
                         </table>
+                    </div>
+                    
+                    <div>
+                        <canvas id="spectrogram-preview" width="256" height="128"></canvas>
+                        <audio id="spectrogram-audio" controls></audio>
+                        <a id="spectrogram-download" download="paper-spectrogram.wav">Download WAV</a>
                     </div>
                 </div>
             </section>
